@@ -1,0 +1,14 @@
+.board-list { max-width: 720px; margin: 0 auto; padding: 32px 16px; }
+.board-list header { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+.board-list h1 { font-size: 20px; margin: 0; flex: 1; }
+.board-list .primary { background: var(--accent); color: #fff; border: 0; border-radius: var(--radius); padding: 8px 14px; }
+.board-list .search { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; font: inherit; }
+.board-list ul { list-style: none; padding: 0; margin: 0; }
+.board-list li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.board-list li a { flex: 1; color: inherit; text-decoration: none; font-weight: 500; }
+.board-list li input { flex: 1; font: inherit; padding: 2px 6px; }
+.board-list .meta { color: var(--text-muted); font-size: 13px; }
+.board-list .ghost { background: none; border: 0; color: var(--text-muted); padding: 4px 6px; border-radius: 6px; }
+.board-list .ghost:hover { background: var(--border); }
+.board-list .ghost.danger:hover { color: var(--danger); }
+.board-list .empty { color: var(--text-muted); text-align: center; padding: 32px 0; }

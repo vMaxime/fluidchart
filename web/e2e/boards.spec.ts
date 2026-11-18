@@ -1,0 +1,20 @@
+import { test, expect } from '@playwright/test'
+
+test('create, rename, search and delete a board', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('Aucune carte')).toBeVisible()
+  await page.getByRole('button', { name: 'Nouvelle carte' }).click()
+  await expect(page).toHaveURL(/\/b\/[0-9a-f-]{36}$/)
+  await page.getByRole('link', { name: '← Cartes' }).click()
+  await page.getByRole('button', { name: 'Renommer Sans titre' }).click()
+  await page.getByRole('textbox', { name: 'Nom de la carte' }).fill('Hépatite B')
+  await page.keyboard.press('Enter')
+  await page.getByPlaceholder('Rechercher une carte…').fill('hepatite')
+  await expect(page.getByText('Hépatite B')).toBeVisible()
+  await page.getByPlaceholder('Rechercher une carte…').fill('cardio')
+  await expect(page.getByText('Aucune carte')).toBeVisible()
+  await page.getByPlaceholder('Rechercher une carte…').fill('')
+  page.once('dialog', (d) => { expect(d.message()).toBe('Supprimer la carte « Hépatite B » ?'); d.accept() })
+  await page.getByRole('button', { name: 'Supprimer Hépatite B' }).click()
+  await expect(page.getByText('Aucune carte')).toBeVisible()
+})

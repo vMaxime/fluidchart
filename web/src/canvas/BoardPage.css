@@ -1,0 +1,5 @@
+.board-page { display: flex; flex-direction: column; height: 100%; }
+.board-page header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.board-page header a { color: var(--text-muted); text-decoration: none; }
+.board-page h1 { font-size: 16px; margin: 0; font-weight: 600; }
+.board-page .board-body { flex: 1; position: relative; }
