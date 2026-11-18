@@ -6,7 +6,9 @@ import {
   ReactFlow,
   useNodesInitialized,
   useReactFlow,
+  type InternalNode,
   type OnEdgesChange,
+  type XYPosition,
   type OnNodeDrag,
   type OnNodesChange,
 } from '@xyflow/react'
@@ -16,7 +18,8 @@ import { addArrow, addNote, deleteArrows, deleteNotes, listArrows, listNotes, up
 import { trackWrite } from '../db/saveErrors'
 import { ArrowPreview, useArrowDrag } from './arrowDrag'
 import { CanvasContext, type Tool } from './CanvasContext'
-import { ElbowEdge } from './ElbowEdge'
+import { CurveEdge } from './CurveEdge'
+import { besidePosition, type Rect, type Side } from './edgeGeometry'
 import { mergeEdges, mergeNodes, type ArrowFlowEdge, type NoteFlowNode } from './flowMapping'
 import { isTypingTarget, printableKey } from './keys'
 import { getLastColor, setLastColor } from './lastColor'
@@ -25,7 +28,7 @@ import { ToolBar } from './ToolBar'
 import './canvas.css'
 
 const nodeTypes = { note: NoteNode }
-const edgeTypes = { elbow: ElbowEdge }
+const edgeTypes = { curve: CurveEdge }
 
 /** Frame the board once its notes are measured (React Flow 13: a bare padding number means pixels). */
 function FitOnce({ enabled }: { enabled: boolean }) {
@@ -49,7 +52,8 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const [tool, setTool] = useState<Tool>('select')
   const [editing, setEditing] = useState<{ id: Id; initialInput?: string } | null>(null)
   const freshIds = useRef(new Set<Id>())
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, getInternalNode, getNodes, getViewport, setCenter } = useReactFlow<NoteFlowNode>()
+  const flowRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!notes) return
@@ -76,20 +80,79 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     setLastColor(color)
   }, [])
 
-  const arrow = useArrowDrag((from, to) => {
+  const arrow = useArrowDrag((from, { to }) => {
     if (!to) return // missed: stay in arrow mode, Escape to give up
     void trackWrite(addArrow(boardId, from, to))
     setTool('select')
   })
 
+  /** Glide the view when a note grown from a + lands off-screen, so its text is visible while typed. */
+  const reveal = useCallback(
+    (centre: XYPosition) => {
+      const box = flowRef.current?.getBoundingClientRect()
+      if (!box) return
+      const { x, y, zoom } = getViewport()
+      const sx = centre.x * zoom + x
+      const sy = centre.y * zoom + y
+      const m = 120
+      if (sx < m || sx > box.width - m || sy < m || sy > box.height - m)
+        void setCenter(centre.x, centre.y, { zoom, duration: 220 })
+    },
+    [getViewport, setCenter],
+  )
+
+  /** New note connected from `from`, same colour, opened for typing. */
+  const growConnected = useCallback(
+    (from: Id, topLeft: XYPosition) => {
+      const color = getNodes().find((n) => n.id === from)?.data.note.color ?? getLastColor()
+      void trackWrite(addNote(boardId, topLeft, color)).then((note) => {
+        if (!note) return
+        void trackWrite(addArrow(boardId, from, note.id))
+        freshIds.current.add(note.id)
+        setEditing({ id: note.id })
+        reveal({ x: topLeft.x + DEFAULT_NOTE_WIDTH / 2, y: topLeft.y + 40 })
+      })
+    },
+    [boardId, getNodes, reveal],
+  )
+
+  const growBeside = useCallback(
+    (from: Id, side: Side) => {
+      const toRect = (n: InternalNode): Rect => ({
+        x: n.internals.positionAbsolute.x,
+        y: n.internals.positionAbsolute.y,
+        width: n.measured.width ?? DEFAULT_NOTE_WIDTH,
+        height: n.measured.height ?? 64,
+      })
+      const source = getInternalNode(from)
+      if (!source) return
+      const others = getNodes().flatMap((n) => {
+        const internal = getInternalNode(n.id)
+        return internal ? [toRect(internal)] : []
+      })
+      growConnected(from, besidePosition(toRect(source), side, others))
+    },
+    [getInternalNode, getNodes, growConnected],
+  )
+
+  // + knobs: tap grows beside, drag onto a note connects, drag onto empty canvas grows there.
+  const knob = useArrowDrag<Side>((from, { to, at, moved }, side) => {
+    if (!moved) growBeside(from, side)
+    else if (to) void trackWrite(addArrow(boardId, from, to))
+    else if (at) growConnected(from, { x: at.x - DEFAULT_NOTE_WIDTH / 2, y: at.y - 30 })
+  })
+  const drag = arrow.drag ?? knob.drag
+
   const createNoteAt = useCallback(
     (clientX: number, clientY: number) => {
       const p = screenToFlowPosition({ x: clientX, y: clientY })
-      void trackWrite(addNote(boardId, { x: p.x - DEFAULT_NOTE_WIDTH / 2, y: p.y - 30 }, getLastColor())).then((note) => {
-        if (!note) return
-        freshIds.current.add(note.id)
-        setEditing({ id: note.id })
-      })
+      void trackWrite(addNote(boardId, { x: p.x - DEFAULT_NOTE_WIDTH / 2, y: p.y - 30 }, getLastColor())).then(
+        (note) => {
+          if (!note) return
+          freshIds.current.add(note.id)
+          setEditing({ id: note.id })
+        },
+      )
     },
     [boardId, screenToFlowPosition],
   )
@@ -138,14 +201,28 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       editingId,
       initialInput: editing?.initialInput,
       paletteFor: editingId ?? (selected.length === 1 ? selected[0].id : null),
-      arrowTarget: arrow.drag?.targetId ?? null,
+      arrowTarget: drag?.targetId ?? null,
       freshIds: freshIds.current,
       startEditing,
       stopEditing,
       recolor,
-      startArrow: arrow.start,
+      startArrow: (id: Id, e: React.PointerEvent) => arrow.start(id, e, undefined),
+      startKnob: (id: Id, side: Side, e: React.PointerEvent) => knob.start(id, e, side),
+      growBeside,
     }),
-    [tool, editingId, editing?.initialInput, selected, arrow.drag?.targetId, arrow.start, startEditing, stopEditing, recolor],
+    [
+      tool,
+      editingId,
+      editing?.initialInput,
+      selected,
+      drag?.targetId,
+      arrow,
+      knob.start,
+      growBeside,
+      startEditing,
+      stopEditing,
+      recolor,
+    ],
   )
 
   if (!nodes) return null
@@ -155,6 +232,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       <div className={`board-canvas tool-${tool}`}>
         <ToolBar tool={tool} onChange={setTool} />
         <div
+          ref={flowRef}
           className="board-flow"
           onDoubleClick={(e) => {
             if (tool === 'select' && e.target instanceof Element && e.target.classList.contains('react-flow__pane'))
@@ -193,7 +271,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
             maxZoom={4}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#d6d3d1" />
-            <ArrowPreview drag={arrow.drag} />
+            <ArrowPreview drag={drag} />
             <FitOnce enabled={fitOnMount.current === true} />
           </ReactFlow>
         </div>

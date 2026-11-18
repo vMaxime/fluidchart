@@ -139,6 +139,9 @@ test('the colour palette sits above a new or selected note and keeps editing goi
   await expect(palette).toHaveCount(0)
   await notes(page).first().click()
   await expect(palette).toBeVisible()
+  // On a selected note the palette sits above the top + knob instead of covering it.
+  const knob = (await page.getByRole('button', { name: 'Nouveau post-it au-dessus' }).boundingBox())!
+  expect((await palette.boundingBox())!.y + (await palette.boundingBox())!.height).toBeLessThanOrEqual(knob.y)
 })
 
 test('tool tooltips pop to the right of the button', async ({ page }) => {
@@ -154,4 +157,53 @@ test('canvas stays light when the system is in dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
   await newBoard(page)
   await expect(page.locator('.react-flow')).toHaveClass(/\blight\b/)
+})
+
+test('arrows are smooth curves', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 600, y: 350 })
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
+  expect(await page.locator('.react-flow__edge path.arrow').getAttribute('d')).toContain('C')
+})
+
+test('clicking the + on the right of a note grows a connected note there, in edit mode', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 250, y: 250 })
+  const source = notes(page).first()
+  const sourceX = (await source.boundingBox())!.x // measured now: .first() may resolve to the new note later
+  await source.hover()
+  await page.getByRole('button', { name: 'Nouveau post-it à droite' }).click()
+  await expect(editor(page)).toBeFocused()
+  await expect(notes(page)).toHaveCount(2)
+  await expect(page.locator('.react-flow__edge')).toHaveCount(1)
+  await page.keyboard.type('Suite')
+  await page.keyboard.press('Escape')
+  const grown = notes(page).filter({ hasText: 'Suite' })
+  expect((await grown.boundingBox())!.x).toBeGreaterThan(sourceX + 100)
+})
+
+test('dragging a + onto another note connects them; onto empty canvas grows a note there', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 650, y: 200 })
+  const [a, b] = [notes(page).nth(0), notes(page).nth(1)]
+  await a.hover()
+  const knob = await center(a.getByRole('button', { name: 'Nouveau post-it en dessous' }))
+  const target = await center(b)
+  await page.mouse.move(knob.x, knob.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.react-flow__edge')).toHaveCount(1)
+  await expect(notes(page)).toHaveCount(2)
+  await a.hover()
+  const knob2 = await center(a.getByRole('button', { name: 'Nouveau post-it en dessous' }))
+  await page.mouse.move(knob2.x, knob2.y)
+  await page.mouse.down()
+  await page.mouse.move(knob2.x, knob2.y + 220, { steps: 10 })
+  await page.mouse.up()
+  await expect(editor(page)).toBeFocused()
+  await expect(notes(page)).toHaveCount(3)
+  await expect(page.locator('.react-flow__edge')).toHaveCount(2)
 })

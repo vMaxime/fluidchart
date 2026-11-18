@@ -85,7 +85,12 @@ export function ToolBar({ tool, onChange }: { tool: Tool; onChange(tool: Tool): 
             </svg>
           </button>
           {tip?.index === i && (
-            <span id={`tool-tip-${t.tool}`} role="tooltip" className="toolbar-tip" data-instant={tip.instant || undefined}>
+            <span
+              id={`tool-tip-${t.tool}`}
+              role="tooltip"
+              className="toolbar-tip"
+              data-instant={tip.instant || undefined}
+            >
               {t.label}
               <kbd>{t.shortcut}</kbd>
             </span>

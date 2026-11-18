@@ -27,7 +27,7 @@
 .note-in { animation: note-in 180ms var(--ease-out); transform-origin: center; }
 
 /* Arrows */
-.react-flow__edge .arrow { stroke: #57534e; stroke-width: 1.5; }
+.react-flow__edge .arrow { stroke: #78716c; stroke-width: 1.5; }
 .react-flow__edge.selected .arrow, .arrow.selected { stroke: var(--accent); }
 .arrow-preview { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .arrow-preview line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
@@ -108,4 +108,31 @@
 
 @media (prefers-reduced-motion: reduce) {
   .note-in, .toolbar-tip, .tool-hint, .note-palette { animation: none; }
+  .knob { transition: none; }
 }
+
+/* + knobs: grow a connected note from any side (hover or selected note) */
+.note { position: relative; }
+.note::after { content: ''; position: absolute; inset: -34px; z-index: -1; } /* keeps :hover while reaching a knob */
+.knob {
+  position: absolute; z-index: 2;
+  display: grid; place-items: center;
+  width: 20px; height: 20px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-muted);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  cursor: crosshair;
+  opacity: 0; transform: scale(0.8);
+  transition: opacity 150ms ease-out, transform 150ms var(--ease-out), color 120ms ease-out, border-color 120ms ease-out;
+}
+.knob svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.knob-top { top: -28px; left: calc(50% - 10px); }
+.knob-bottom { bottom: -28px; left: calc(50% - 10px); }
+.knob-left { left: -28px; top: calc(50% - 10px); }
+.knob-right { right: -28px; top: calc(50% - 10px); }
+.react-flow__node:hover .knob, .note.selected .knob, .knob:focus-visible { opacity: 1; transform: scale(1); }
+@media (hover: hover) and (pointer: fine) {
+  .knob:hover { color: var(--accent); border-color: var(--accent); }
+}
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.react-flow__node.dragging .knob { opacity: 0; }

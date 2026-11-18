@@ -3,6 +3,8 @@ import { useReactFlow, ViewportPortal, type XYPosition } from '@xyflow/react'
 import type { Id } from '@chart/shared'
 
 export type ArrowDrag = { from: Id; start: XYPosition; end: XYPosition; targetId: Id | null }
+/** Where a drag ended: on another note, on empty canvas (`at`, flow coordinates), or a tap (`moved` false). */
+export type ArrowDrop = { to: Id | null; at: XYPosition | null; moved: boolean }
 
 function noteAt(x: number, y: number, exclude: Id): Id | null {
   for (const el of document.elementsFromPoint(x, y)) {
@@ -12,8 +14,11 @@ function noteAt(x: number, y: number, exclude: Id): Id | null {
   return null
 }
 
-/** Arrow tool: press on a note, release on another. `onDrop` gets null when released elsewhere. */
-export function useArrowDrag(onDrop: (from: Id, to: Id | null) => void) {
+const overPane = (x: number, y: number) =>
+  document.elementsFromPoint(x, y).some((el) => el.classList.contains('react-flow__pane'))
+
+/** Press on a note (or one of its + knobs) and drag; `onDrop` says where it ended. */
+export function useArrowDrag<M = undefined>(onDrop: (from: Id, drop: ArrowDrop, meta: M) => void) {
   const { screenToFlowPosition, getInternalNode } = useReactFlow()
   const [drag, setDrag] = useState<ArrowDrag | null>(null)
   const latest = useRef(onDrop)
@@ -22,7 +27,7 @@ export function useArrowDrag(onDrop: (from: Id, to: Id | null) => void) {
   })
 
   const start = useCallback(
-    (from: Id, e: ReactPointerEvent) => {
+    (from: Id, e: ReactPointerEvent, meta: M) => {
       if (e.button !== 0) return
       e.stopPropagation()
       e.preventDefault()
@@ -32,16 +37,24 @@ export function useArrowDrag(onDrop: (from: Id, to: Id | null) => void) {
         x: n.internals.positionAbsolute.x + (n.measured.width ?? 0) / 2,
         y: n.internals.positionAbsolute.y + (n.measured.height ?? 0) / 2,
       }
+      const origin = { x: e.clientX, y: e.clientY }
+      let moved = false
       let targetId: Id | null = null
       const move = (ev: PointerEvent) => {
+        if (!moved && Math.hypot(ev.clientX - origin.x, ev.clientY - origin.y) < 4) return
+        moved = true
         targetId = noteAt(ev.clientX, ev.clientY, from)
         setDrag({ from, start: begin, end: screenToFlowPosition({ x: ev.clientX, y: ev.clientY }), targetId })
       }
-      const up = () => {
+      const up = (ev: PointerEvent) => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         setDrag(null)
-        latest.current(from, targetId)
+        const at =
+          moved && !targetId && overPane(ev.clientX, ev.clientY)
+            ? screenToFlowPosition({ x: ev.clientX, y: ev.clientY })
+            : null
+        latest.current(from, { to: targetId, at, moved }, meta)
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)

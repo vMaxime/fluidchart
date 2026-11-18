@@ -22,3 +22,33 @@ export function sideAnchors(s: Rect, t: Rect) {
     ? { sx: sc.x, sy: s.y + s.height, sPos: Position.Bottom, tx: tc.x, ty: t.y, tPos: Position.Top }
     : { sx: sc.x, sy: s.y, sPos: Position.Top, tx: tc.x, ty: t.y + t.height, tPos: Position.Bottom }
 }
+
+export type Side = 'top' | 'right' | 'bottom' | 'left'
+
+const NEW_W = 200 // DEFAULT_NOTE_WIDTH
+const NEW_H = 80 // typical height of a fresh note
+const GAP_X = 90
+const GAP_Y = 56
+
+const overlaps = (a: Rect, b: Rect) =>
+  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+
+/**
+ * Top-left corner for a note grown from `source` on `side` (the + knobs): beside it with a gap,
+ * then slid along that side past any note already in the way.
+ */
+export function besidePosition(source: Rect, side: Side, others: Rect[]): { x: number; y: number } {
+  const p = {
+    right: { x: source.x + source.width + GAP_X, y: source.y },
+    left: { x: source.x - GAP_X - NEW_W, y: source.y },
+    bottom: { x: source.x + source.width / 2 - NEW_W / 2, y: source.y + source.height + GAP_Y },
+    top: { x: source.x + source.width / 2 - NEW_W / 2, y: source.y - GAP_Y - NEW_H },
+  }[side]
+  for (let i = 0; i < 50; i++) {
+    const blocker = others.find((o) => overlaps({ ...p, width: NEW_W, height: NEW_H }, o))
+    if (!blocker) break
+    if (side === 'left' || side === 'right') p.y = blocker.y + blocker.height + 20
+    else p.x = blocker.x + blocker.width + 30
+  }
+  return p
+}

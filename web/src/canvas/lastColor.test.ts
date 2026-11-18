@@ -1,6 +1,9 @@
 import { afterEach, it, expect, vi } from 'vitest'
 import { getLastColor, setLastColor } from './lastColor'
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+afterEach(() => {
+  vi.restoreAllMocks()
+  localStorage.clear()
+})
 
 it('defaults to yellow', () => {
   expect(getLastColor()).toBe('yellow')
@@ -14,8 +17,12 @@ it('ignores an invalid stored value', () => {
   expect(getLastColor()).toBe('yellow')
 })
 it('does not crash when localStorage throws', () => {
-  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('blocked')
+  })
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('blocked')
+  })
   expect(() => setLastColor('blue')).not.toThrow()
   expect(getLastColor()).toBe('yellow')
 })

@@ -7,13 +7,13 @@ it('renders the initial html', async () => {
   expect(await screen.findByText('Insuline')).toBeInTheDocument()
 })
 it('Escape calls onDone without a spurious save when nothing changed', async () => {
-  const onChange = vi.fn(); const onDone = vi.fn()
+  const onChange = vi.fn()
+  const onDone = vi.fn()
   render(<NoteEditor html="<p>Insuline</p>" onChange={onChange} onDone={onDone} />)
   fireEvent.keyDown(await screen.findByRole('textbox', { name: 'Texte du post-it' }), { key: 'Escape' })
   await waitFor(() => expect(onDone).toHaveBeenCalled())
   expect(onChange).not.toHaveBeenCalled()
 })
-
 
 it('appends initialInput after the existing text once focused (type-to-edit)', async () => {
   const onChange = vi.fn()
