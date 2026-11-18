@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('app opens and works offline after a first visit', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'Service worker offline emulation: Chromium only')

@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from './fixtures'
 
 async function newBoard(page: Page) {
   await page.goto('/')
