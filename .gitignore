@@ -6,3 +6,5 @@ playwright-report
 .env*
 .superpowers/
 .DS_Store
+server/dist
+server/data
