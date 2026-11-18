@@ -6,6 +6,14 @@ async function newBoard(page: Page) {
   await expect(page.locator('.react-flow__pane')).toBeVisible()
 }
 const notes = (page: Page) => page.getByTestId('note')
+const editor = (page: Page) => page.getByRole('textbox', { name: 'Texte du post-it' })
+// Double-click creates a note in edit mode: wait for the editor, then leave it with Escape.
+async function createNote(page: Page, position: { x: number; y: number }) {
+  await page.locator('.react-flow__pane').dblclick({ position })
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+}
 // L'ordre des post-it dans le DOM suit leur id (aléatoire) : on les distingue par couleur.
 const byColor = (page: Page, c: string) => page.locator(`[data-testid="note"][data-color="${c}"]`)
 // Reads note rows straight from IndexedDB, to wait for a write to land before reloading.
@@ -36,9 +44,8 @@ async function dragBy(page: Page, target: Locator, dx: number, dy: number) {
 
 test('double-click on empty canvas creates a note, not on a note', async ({ page }) => {
   await newBoard(page)
-  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await createNote(page, { x: 300, y: 200 })
   await expect(notes(page)).toHaveCount(1)
-  await page.keyboard.press('Escape')
   await notes(page).first().dblclick()
   await expect(notes(page)).toHaveCount(1)
 })
@@ -46,8 +53,8 @@ test('double-click on empty canvas creates a note, not on a note', async ({ page
 test('drag, arrow and color survive a reload', async ({ page }) => {
   await newBoard(page)
   const pane = page.locator('.react-flow__pane')
-  await pane.dblclick({ position: { x: 200, y: 200 } }); await page.keyboard.press('Escape')
-  await pane.dblclick({ position: { x: 600, y: 200 } }); await page.keyboard.press('Escape')
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 600, y: 200 })
   await connect(page, notes(page).nth(0).locator('.react-flow__handle-right'), notes(page).nth(1).locator('.react-flow__handle-left'))
   await expect(page.locator('.react-flow__edge')).toHaveCount(1)
   await notes(page).nth(1).click()
@@ -70,8 +77,8 @@ test('drag, arrow and color survive a reload', async ({ page }) => {
 test('Backspace on a selected note deletes it and its arrows', async ({ page }) => {
   await newBoard(page)
   const pane = page.locator('.react-flow__pane')
-  await pane.dblclick({ position: { x: 200, y: 200 } }); await page.keyboard.press('Escape')
-  await pane.dblclick({ position: { x: 600, y: 200 } }); await page.keyboard.press('Escape')
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 600, y: 200 })
   await connect(page, notes(page).nth(0).locator('.react-flow__handle-right'), notes(page).nth(1).locator('.react-flow__handle-left'))
   await notes(page).nth(1).click()
   await page.keyboard.press('Backspace')
