@@ -9,3 +9,4 @@ playwright-report
 server/dist
 server/data
 web/e2e/.auth/
+!.env.example

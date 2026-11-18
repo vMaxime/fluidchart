@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/dev-dist
+.git
+.superpowers
+.claude
+.agents
+docs
+data
+server/data
+web/test-results
+web/playwright-report
+web/e2e/.auth
+.env
