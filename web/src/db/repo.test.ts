@@ -76,3 +76,11 @@ it('updateNote marks the row dirty with a fresh updatedAt', async () => {
   await repo.updateNote(n.id, { html: '<p>Insuline</p>' })
   expect(await db.notes.get(n.id)).toMatchObject({ html: '<p>Insuline</p>', dirty: 1, updatedAt: 9000 })
 })
+
+it('renameBoard with an unchanged name writes nothing', async () => {
+  const b = await repo.createBoard('Cardio')
+  await db.boards.update(b.id, { dirty: 0 })
+  vi.setSystemTime(2000)
+  await repo.renameBoard(b.id, '  Cardio ')
+  expect(await db.boards.get(b.id)).toMatchObject({ updatedAt: 1000, dirty: 0 })
+})

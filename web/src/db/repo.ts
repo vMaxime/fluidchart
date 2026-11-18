@@ -47,7 +47,13 @@ export async function createBoard(name: string): Promise<Board> {
 }
 
 export async function renameBoard(id: Id, name: string): Promise<void> {
-  await db.boards.update(id, { name: normalizeBoardName(name), ...touched() })
+  const next = normalizeBoardName(name)
+  await db.transaction('rw', db.boards, async () => {
+    const row = await db.boards.get(id)
+    // An unchanged name must not bump updatedAt: under last-write-wins it would undo a real rename elsewhere.
+    if (!row || row.name === next) return
+    await db.boards.update(id, { name: next, ...touched() })
+  })
 }
 
 export async function deleteBoard(id: Id): Promise<void> {

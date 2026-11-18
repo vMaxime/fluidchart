@@ -6,13 +6,20 @@ import { useFlushOnHide } from '../lib/useFlushOnHide'
 
 const SAVE_DELAY_MS = 400
 
-type Props = { html: string; onChange(html: string): void; onDone(): void }
+type Props = {
+  html: string
+  /** Debounced save. */
+  onChange(html: string): void
+  /** Called synchronously on every edit, for the crash-safe journal. */
+  onDraft?(html: string): void
+  onDone(): void
+}
 
 /** Rich-text editor shown inside a note while it is being edited. Saves as you type. */
-export function NoteEditor({ html, onChange, onDone }: Props) {
-  const callbacks = useRef({ onChange, onDone })
+export function NoteEditor({ html, onChange, onDraft, onDone }: Props) {
+  const callbacks = useRef({ onChange, onDraft, onDone })
   useEffect(() => {
-    callbacks.current = { onChange, onDone }
+    callbacks.current = { onChange, onDraft, onDone }
   })
   const debouncer = useMemo(() => createDebouncer<string>((v) => callbacks.current.onChange(v), SAVE_DELAY_MS), [])
   const finished = useRef(false)
@@ -34,7 +41,11 @@ export function NoteEditor({ html, onChange, onDone }: Props) {
         return true
       },
     },
-    onUpdate: ({ editor }) => debouncer.call(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      const next = editor.getHTML()
+      callbacks.current.onDraft?.(next)
+      debouncer.call(next)
+    },
     onBlur: () => finish(),
   })
 

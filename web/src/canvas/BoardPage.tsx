@@ -7,7 +7,11 @@ import { BoardCanvas } from './BoardCanvas'
 import './BoardPage.css'
 
 export function BoardPage({ id }: { id: Id }) {
-  const board = useLiveQuery(() => getBoard(id), [id])
+  // undefined = still loading; null = no such board (never existed, or deleted here or elsewhere).
+  const board = useLiveQuery(async () => {
+    const b = await getBoard(id)
+    return b && !b.deleted ? b : null
+  }, [id])
   return (
     <div className="board-page">
       <header>
@@ -15,9 +19,16 @@ export function BoardPage({ id }: { id: Id }) {
         <h1>{board?.name}</h1>
       </header>
       <div className="board-body">
-        <ReactFlowProvider>
-          <BoardCanvas boardId={id} />
-        </ReactFlowProvider>
+        {board === null && (
+          <p className="board-missing">
+            Carte introuvable. <Link href="/">Retour aux cartes</Link>
+          </p>
+        )}
+        {board && (
+          <ReactFlowProvider>
+            <BoardCanvas boardId={id} />
+          </ReactFlowProvider>
+        )}
       </div>
     </div>
   )
