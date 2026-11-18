@@ -49,3 +49,14 @@ test('Backspace right after leaving an existing note does not delete it', async 
   await expect(note).toHaveCount(1)
   await expect(note).toContainText('Insuline')
 })
+
+test('typing on a selected note opens it and appends the text', async ({ page }) => {
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('Escape')
+  const note = page.getByTestId('note')
+  await note.click()
+  await page.keyboard.press('X')
+  await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(note).toHaveText('InsulineX')
+})

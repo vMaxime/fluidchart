@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { MarkerType } from '@xyflow/react'
 import { newArrow, newNote } from '@chart/shared'
-import { mergeEdges, mergeNodes } from './flowMapping'
+import { ARROW_COLOR, mergeEdges, mergeNodes } from './flowMapping'
 const note = { ...newNote('b', { x: 10, y: 10 }, 'yellow', 0), id: 'n1' }
 const arrow = { ...newArrow('b', 'n1', 'n2', 0), id: 'a1' }
 
@@ -18,9 +18,16 @@ it('drops nodes whose note is gone', () => {
   const current = [{ id: 'old', type: 'note', position: { x: 0, y: 0 }, data: { note } }] as any
   expect(mergeNodes([note], current).map((n) => n.id)).toEqual(['n1'])
 })
-it('mergeEdges maps arrows to floating edges with a closed arrow head', () => {
+it('mergeEdges maps arrows to elbow edges with a closed arrow head in the arrow colour', () => {
   expect(mergeEdges([arrow], [])).toEqual([
-    { id: 'a1', source: 'n1', target: 'n2', type: 'floating', markerEnd: { type: MarkerType.ArrowClosed }, selected: false },
+    {
+      id: 'a1',
+      source: 'n1',
+      target: 'n2',
+      type: 'elbow',
+      markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLOR, width: 16, height: 16 },
+      selected: false,
+    },
   ])
 })
 it('mergeEdges keeps selection', () => {

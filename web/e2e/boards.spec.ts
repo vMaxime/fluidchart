@@ -34,3 +34,16 @@ test('an unknown or deleted board shows "Carte introuvable" instead of a canvas'
   await expect(page.getByText('Carte introuvable')).toBeVisible()
   await expect(page.locator('.react-flow__pane')).toHaveCount(0)
 })
+
+test('a new board opens with its title selected, ready to type', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nouvelle carte' }).click()
+  const title = page.getByRole('textbox', { name: 'Nom de la carte' })
+  await expect(title).toBeFocused()
+  await expect(title).toHaveValue('Sans titre')
+  await page.keyboard.type('Cardiologie')
+  await page.locator('.react-flow__pane').click({ position: { x: 300, y: 300 } })
+  await expect(title).toHaveValue('Cardiologie')
+  await page.getByRole('link', { name: '← Cartes' }).click()
+  await expect(page.getByRole('link', { name: 'Cardiologie' })).toBeVisible()
+})

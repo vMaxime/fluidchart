@@ -14,3 +14,10 @@ it('Escape calls onDone without a spurious save when nothing changed', async () 
   expect(onChange).not.toHaveBeenCalled()
 })
 
+
+it('appends initialInput after the existing text once focused (type-to-edit)', async () => {
+  const onChange = vi.fn()
+  render(<NoteEditor html="<p>Insuline</p>" initialInput="X" onChange={onChange} onDone={() => {}} />)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Texte du post-it' })).toHaveTextContent('InsulineX'))
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith('<p>InsulineX</p>'), { timeout: 1500 })
+})

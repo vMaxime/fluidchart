@@ -13,10 +13,12 @@ type Props = {
   /** Called synchronously on every edit, for the crash-safe journal. */
   onDraft?(html: string): void
   onDone(): void
+  /** Text typed on a selected note before the editor opened (type-to-edit): appended once focused. */
+  initialInput?: string
 }
 
 /** Rich-text editor shown inside a note while it is being edited. Saves as you type. */
-export function NoteEditor({ html, onChange, onDraft, onDone }: Props) {
+export function NoteEditor({ html, onChange, onDraft, onDone, initialInput }: Props) {
   const callbacks = useRef({ onChange, onDraft, onDone })
   useEffect(() => {
     callbacks.current = { onChange, onDraft, onDone }
@@ -55,13 +57,23 @@ export function NoteEditor({ html, onChange, onDraft, onDone }: Props) {
     if (!editor) return
     let frame = 0
     let tries = 0
+    let inserted = false
     const tryFocus = () => {
-      if (editor.isDestroyed || editor.view.hasFocus()) return
-      editor.commands.focus('end')
-      if (!editor.view.hasFocus() && ++tries < 60) frame = requestAnimationFrame(tryFocus)
+      if (editor.isDestroyed) return
+      if (!editor.view.hasFocus()) editor.commands.focus('end')
+      if (editor.view.hasFocus()) {
+        if (initialInput && !inserted) {
+          inserted = true
+          editor.commands.insertContent(initialInput)
+        }
+        return
+      }
+      if (++tries < 60) frame = requestAnimationFrame(tryFocus)
     }
     tryFocus()
     return () => cancelAnimationFrame(frame)
+    // initialInput is read once, when the editor opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
   useFlushOnHide(debouncer.flush)

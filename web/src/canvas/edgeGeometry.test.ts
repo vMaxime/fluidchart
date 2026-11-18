@@ -1,17 +1,22 @@
 import { it, expect } from 'vitest'
-import { borderPoint, floatingEndpoints } from './edgeGeometry'
-const r = { x: 0, y: 0, width: 100, height: 50 } // centre (50, 25)
+import { Position } from '@xyflow/react'
+import { sideAnchors } from './edgeGeometry'
 
-it('borderPoint toward the right hits the middle of the right border', () => {
-  expect(borderPoint(r, { x: 500, y: 25 })).toEqual({ x: 100, y: 25 })
+const a = { x: 0, y: 0, width: 200, height: 80 } // centre (100, 40)
+
+it('links facing sides horizontally when the target is mostly to the right', () => {
+  expect(sideAnchors(a, { x: 300, y: 20, width: 200, height: 60 })).toEqual({
+    sx: 200, sy: 40, sPos: Position.Right, tx: 300, ty: 50, tPos: Position.Left,
+  })
 })
-it('borderPoint toward a steep diagonal hits the bottom border', () => {
-  expect(borderPoint(r, { x: 70, y: 125 })).toEqual({ x: 55, y: 50 })
+it('links facing sides horizontally when the target is to the left', () => {
+  expect(sideAnchors(a, { x: -300, y: 0, width: 200, height: 80 })).toMatchObject({ sx: 0, sPos: Position.Left, tx: -100, tPos: Position.Right })
 })
-it('borderPoint returns the centre when toward is the centre', () => {
-  expect(borderPoint(r, { x: 50, y: 25 })).toEqual({ x: 50, y: 25 })
+it('links bottom to top when the target is mostly below (feedback loops stay vertical)', () => {
+  expect(sideAnchors(a, { x: 0, y: 300, width: 200, height: 80 })).toEqual({
+    sx: 100, sy: 80, sPos: Position.Bottom, tx: 100, ty: 300, tPos: Position.Top,
+  })
 })
-it('floatingEndpoints uses each rect actual height (tall notes)', () => {
-  const tall = { x: 300, y: -200, width: 100, height: 450 } // centre (350, 25)
-  expect(floatingEndpoints(r, tall)).toEqual({ sx: 100, sy: 25, tx: 300, ty: 25 })
+it('links top to bottom when the target is above', () => {
+  expect(sideAnchors(a, { x: 0, y: -300, width: 200, height: 80 })).toMatchObject({ sy: 0, sPos: Position.Top, ty: -220, tPos: Position.Bottom })
 })

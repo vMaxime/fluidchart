@@ -17,7 +17,7 @@ export function BoardList() {
 
   async function onCreate() {
     const board = await trackWrite(createBoard(UNTITLED_BOARD))
-    if (board) navigate(`/b/${board.id}`)
+    if (board) navigate(`/b/${board.id}`, { state: { justCreated: true } })
   }
 
   function onDelete(id: Id, name: string) {

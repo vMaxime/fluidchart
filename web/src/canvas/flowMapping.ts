@@ -2,7 +2,10 @@ import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import type { Arrow, Note } from '@chart/shared'
 
 export type NoteFlowNode = Node<{ note: Note }, 'note'>
-export type ArrowFlowEdge = Edge<Record<string, never>, 'floating'>
+export type ArrowFlowEdge = Edge<Record<string, never>, 'elbow'>
+
+/** Stone-600: readable on the light canvas without competing with the notes. */
+export const ARROW_COLOR = '#57534e'
 
 /**
  * Rebuild React Flow nodes from the db, keeping local-only UI state
@@ -31,8 +34,8 @@ export function mergeEdges(arrows: Arrow[], current: ArrowFlowEdge[]): ArrowFlow
     id: a.id,
     source: a.from,
     target: a.to,
-    type: 'floating',
-    markerEnd: { type: MarkerType.ArrowClosed },
+    type: 'elbow',
+    markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLOR, width: 16, height: 16 },
     selected: byId.get(a.id)?.selected ?? false,
   }))
 }

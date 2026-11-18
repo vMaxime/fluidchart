@@ -26,12 +26,18 @@ const storedNotes = (page: Page) =>
     }
   }))
 // locator.dragTo() sends a single mousemove, which React Flow does not treat as a node drag.
-async function connect(page: Page, from: Locator, to: Locator) {
-  const a = (await from.boundingBox())!
-  const b = (await to.boundingBox())!
-  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
+const center = async (l: Locator) => {
+  const b = (await l.boundingBox())!
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+}
+// Arrow tool (A): drag from one note to another; the tool returns to selection afterwards.
+async function drawArrow(page: Page, from: Locator, to: Locator) {
+  await page.keyboard.press('a')
+  const a = await center(from)
+  const b = await center(to)
+  await page.mouse.move(a.x, a.y)
   await page.mouse.down()
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 })
+  await page.mouse.move(b.x, b.y, { steps: 10 })
   await page.mouse.up()
 }
 async function dragBy(page: Page, target: Locator, dx: number, dy: number) {
@@ -55,7 +61,7 @@ test('drag, arrow and color survive a reload', async ({ page }) => {
   const pane = page.locator('.react-flow__pane')
   await createNote(page, { x: 200, y: 200 })
   await createNote(page, { x: 600, y: 200 })
-  await connect(page, notes(page).nth(0).locator('.react-flow__handle-right'), notes(page).nth(1).locator('.react-flow__handle-left'))
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
   await expect(page.locator('.react-flow__edge')).toHaveCount(1)
   await notes(page).nth(1).click()
   await page.getByRole('button', { name: 'Rose' }).click()
@@ -79,7 +85,7 @@ test('Backspace on a selected note deletes it and its arrows', async ({ page }) 
   const pane = page.locator('.react-flow__pane')
   await createNote(page, { x: 200, y: 200 })
   await createNote(page, { x: 600, y: 200 })
-  await connect(page, notes(page).nth(0).locator('.react-flow__handle-right'), notes(page).nth(1).locator('.react-flow__handle-left'))
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
   await notes(page).nth(1).click()
   await page.keyboard.press('Backspace')
   await expect(notes(page)).toHaveCount(1)
@@ -92,4 +98,60 @@ test('same board open in two tabs stays in sync', async ({ page, context }) => {
   await other.goto(page.url())
   await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
   await expect(other.getByTestId('note')).toHaveCount(1)
+})
+
+test('arrow tool draws one arrow then goes back to selection; Escape cancels it', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 600, y: 200 })
+  const select = page.getByRole('button', { name: 'Sélectionner' })
+  const arrowTool = page.getByRole('button', { name: 'Ajouter une flèche' })
+  await page.keyboard.press('a')
+  await expect(arrowTool).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Escape')
+  await expect(select).toHaveAttribute('aria-pressed', 'true')
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
+  await expect(page.locator('.react-flow__edge')).toHaveCount(1)
+  await expect(select).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('note tool: N then a click places a note in edit mode, then back to selection', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').click({ position: { x: 50, y: 50 } })
+  await page.keyboard.press('n')
+  await page.locator('.react-flow__pane').click({ position: { x: 400, y: 300 } })
+  await expect(editor(page)).toBeFocused()
+  await expect(notes(page)).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Sélectionner' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('the colour palette sits above a new or selected note and keeps editing going', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 400, y: 300 } })
+  await expect(editor(page)).toBeFocused()
+  const palette = page.getByRole('group', { name: 'Couleur du post-it' })
+  await expect(palette).toBeVisible()
+  expect((await palette.boundingBox())!.y).toBeLessThan((await notes(page).first().boundingBox())!.y)
+  await palette.getByRole('button', { name: 'Vert' }).click()
+  await expect(notes(page).first()).toHaveAttribute('data-color', 'green')
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(palette).toHaveCount(0)
+  await notes(page).first().click()
+  await expect(palette).toBeVisible()
+})
+
+test('tool tooltips pop to the right of the button', async ({ page }) => {
+  await newBoard(page)
+  const button = page.getByRole('button', { name: 'Ajouter une flèche' })
+  await button.hover()
+  const tip = page.getByRole('tooltip')
+  await expect(tip).toHaveText(/Ajouter une flèche/)
+  expect((await tip.boundingBox())!.x).toBeGreaterThan((await button.boundingBox())!.x + (await button.boundingBox())!.width)
+})
+
+test('canvas stays light when the system is in dark mode', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await newBoard(page)
+  await expect(page.locator('.react-flow')).toHaveClass(/\blight\b/)
 })
