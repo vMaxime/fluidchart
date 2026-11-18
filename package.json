@@ -1,7 +1,11 @@
 {
   "name": "chart",
   "private": true,
-  "workspaces": ["shared", "web"],
+  "workspaces": [
+    "shared",
+    "web",
+    "server"
+  ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
