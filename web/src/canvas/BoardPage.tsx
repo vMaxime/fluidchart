@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ReactFlowProvider } from '@xyflow/react'
 import { Link } from 'wouter'
@@ -6,17 +5,11 @@ import type { Id } from '@chart/shared'
 import { getBoard } from '../db/repo'
 import { BoardCanvas } from './BoardCanvas'
 import { BoardTitle } from './BoardTitle'
+import { useJustCreated } from './useJustCreated'
 import './BoardPage.css'
 
-/** True once, right after "Nouvelle carte" navigated here; cleared so a reload does not refocus. */
-function consumeJustCreated(): boolean {
-  const justCreated = (history.state as { justCreated?: boolean } | null)?.justCreated === true
-  if (justCreated) history.replaceState({ ...history.state, justCreated: false }, '')
-  return justCreated
-}
-
 export function BoardPage({ id }: { id: Id }) {
-  const [justCreated] = useState(consumeJustCreated)
+  const justCreated = useJustCreated()
   // undefined = still loading; null = no such board (never existed, or deleted here or elsewhere).
   const board = useLiveQuery(async () => {
     const b = await getBoard(id)

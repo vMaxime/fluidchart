@@ -1,6 +1,13 @@
 import type { BoardSummary } from '../db/repo'
 
-const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+/** Lower-case, accent-free, ligatures spelled out (œ → oe, æ → ae): how names are compared. */
+export const fold = (s: string) =>
+  s
+    .replace(/[œŒ]/g, 'oe')
+    .replace(/[æÆ]/g, 'ae')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
 
 /** Accent- and case-insensitive name filter; keeps the input order. */
 export function filterBoards(boards: BoardSummary[], query: string): BoardSummary[] {

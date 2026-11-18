@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 import { filterBoards } from './filterBoards'
-const s = (name: string) => ({ id: name, name, createdAt: 0, updatedAt: 0, deleted: false, lastEditedAt: 0 })
+const s = (name: string) => ({ id: name, name, createdAt: 0, updatedAt: 0, deleted: false, lastEditedAt: 0, noteCount: 0, colors: [] })
 
 it('matches without accents or case', () => {
   const boards = [s('Hépatite B'), s('Cardio')]
@@ -10,4 +10,10 @@ it('matches without accents or case', () => {
 it('empty or blank query returns everything in the same order', () => {
   const boards = [s('B'), s('A')]
   expect(filterBoards(boards, '  ')).toEqual(boards)
+})
+
+it('folds the œ and æ ligatures', () => {
+  const boards = [s('Œdème aigu du poumon'), s('Cœur')]
+  expect(filterBoards(boards, 'oedeme').map((b) => b.name)).toEqual(['Œdème aigu du poumon'])
+  expect(filterBoards(boards, 'coeur').map((b) => b.name)).toEqual(['Cœur'])
 })

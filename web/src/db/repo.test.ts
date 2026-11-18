@@ -10,7 +10,7 @@ afterEach(() => vi.useRealTimers())
 
 it('createBoard then listBoards returns it with lastEditedAt = createdAt', async () => {
   const b = await repo.createBoard('Cardio')
-  expect(await repo.listBoards()).toEqual([{ ...b, lastEditedAt: 1000 }])
+  expect(await repo.listBoards()).toEqual([{ ...b, lastEditedAt: 1000, noteCount: 0, colors: [] }])
 })
 
 it('renameBoard normalizes blank names and bumps updatedAt', async () => {
@@ -83,4 +83,29 @@ it('renameBoard with an unchanged name writes nothing', async () => {
   vi.setSystemTime(2000)
   await repo.renameBoard(b.id, '  Cardio ')
   expect(await db.boards.get(b.id)).toMatchObject({ updatedAt: 1000, dirty: 0 })
+})
+
+it('listBoards counts live notes and lists their colours, most used first (max 3)', async () => {
+  const b = await repo.createBoard('A')
+  for (const c of ['pink', 'blue', 'pink', 'green', 'yellow', 'pink', 'blue'] as const) await repo.addNote(b.id, { x: 0, y: 0 }, c)
+  const gone = await repo.addNote(b.id, { x: 0, y: 0 }, 'purple')
+  await repo.deleteNotes([gone.id])
+  const [s] = await repo.listBoards()
+  expect(s.noteCount).toBe(7)
+  expect(s.colors).toEqual(['pink', 'blue', 'yellow']) // ties (green, yellow) follow palette order
+})
+
+it('restoreBoard brings back the board with what was deleted with it, not earlier deletions', async () => {
+  const b = await repo.createBoard('A')
+  const kept = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  const other = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  const earlier = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await repo.addArrow(b.id, kept.id, other.id)
+  vi.setSystemTime(2000); await repo.deleteNotes([earlier.id])
+  vi.setSystemTime(3000); await repo.deleteBoard(b.id)
+  vi.setSystemTime(4000); await repo.restoreBoard(b.id)
+  expect((await repo.listBoards()).map((x) => x.name)).toEqual(['A'])
+  expect((await repo.listNotes(b.id)).map((n) => n.id).sort()).toEqual([kept.id, other.id].sort())
+  expect(await repo.listArrows(b.id)).toHaveLength(1)
+  expect(await db.boards.get(b.id)).toMatchObject({ deleted: false, dirty: 1, updatedAt: 4000 })
 })
