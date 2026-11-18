@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { ReactFlowProvider } from '@xyflow/react'
 import { Link } from 'wouter'
 import type { Id } from '@chart/shared'
 import { getBoard } from '../db/repo'
+import { BoardCanvas } from './BoardCanvas'
 import './BoardPage.css'
 
 export function BoardPage({ id }: { id: Id }) {
@@ -12,7 +14,11 @@ export function BoardPage({ id }: { id: Id }) {
         <Link href="/">← Cartes</Link>
         <h1>{board?.name}</h1>
       </header>
-      <div className="board-body" />
+      <div className="board-body">
+        <ReactFlowProvider>
+          <BoardCanvas boardId={id} />
+        </ReactFlowProvider>
+      </div>
     </div>
   )
 }
