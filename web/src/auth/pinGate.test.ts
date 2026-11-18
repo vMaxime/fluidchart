@@ -3,6 +3,7 @@ import { initialPinState, pinMessage, pinReducer, type PinState } from './pinGat
 
 const typed = (digits: string, s: PinState = initialPinState) =>
   [...digits].reduce((st, d) => pinReducer(st, { type: 'digit', digit: d }), s)
+const HOUR = 3_600_000
 
 it('collects up to 4 digits, then waits for the server', () => {
   const s = typed('246')
@@ -22,10 +23,10 @@ it('a right code opens', () => {
 it('a wrong code clears the dots and starts the cooldown; keys are ignored until it ends', () => {
   const s = pinReducer(typed('1111'), {
     type: 'result',
-    result: { ok: false, reason: 'wrong', attemptsLeft: 2, retryAfterMs: 3000 },
+    result: { ok: false, reason: 'wrong', retryAfterMs: 3000 },
     now: 1000,
   })
-  expect(s).toMatchObject({ status: 'cooldown', digits: '', retryAt: 4000, attemptsLeft: 2 })
+  expect(s).toMatchObject({ status: 'cooldown', digits: '', retryAt: 4000, wrong: true })
   expect(typed('1', s).digits).toBe('')
   expect(pinReducer(s, { type: 'tick', now: 3999 }).status).toBe('cooldown')
   expect(pinReducer(s, { type: 'tick', now: 4000 }).status).toBe('idle')
@@ -40,11 +41,16 @@ it('the server can impose the cooldown too (same rule both sides)', () => {
   expect(s).toMatchObject({ status: 'cooldown', retryAt: 1200 })
 })
 
-it('banned is final', () => {
-  const s = pinReducer(typed('1111'), { type: 'result', result: { ok: false, reason: 'banned' }, now: 0 })
-  expect(s.status).toBe('banned')
+it('too many attempts overall locks new logins until the window frees up, then lets you try again', () => {
+  const s = pinReducer(typed('1111'), {
+    type: 'result',
+    result: { ok: false, reason: 'locked', retryAfterMs: 5 * HOUR },
+    now: 0,
+  })
+  expect(s.status).toBe('locked')
   expect(typed('2468', s).digits).toBe('')
-  expect(pinReducer(s, { type: 'tick', now: 99_999 }).status).toBe('banned')
+  expect(pinReducer(s, { type: 'tick', now: 5 * HOUR - 1 }).status).toBe('locked')
+  expect(pinReducer(s, { type: 'tick', now: 5 * HOUR }).status).toBe('idle')
 })
 
 it('offline lets you try again at once', () => {
@@ -53,21 +59,20 @@ it('offline lets you try again at once', () => {
   )
 })
 
-it('messages warn before the permanent block and count the cooldown down', () => {
-  const after = (attemptsLeft: number) =>
-    pinReducer(typed('1111'), {
-      type: 'result',
-      result: { ok: false, reason: 'wrong', attemptsLeft, retryAfterMs: 3000 },
-      now: 0,
-    })
-  expect(pinMessage(after(2), 0)).toBe('Code incorrect. Encore 2 essais avant blocage. Nouvel essai dans 3 s')
-  expect(pinMessage(after(1), 2100)).toBe('Code incorrect. Dernier essai avant blocage. Nouvel essai dans 1 s')
-  expect(pinMessage(pinReducer(after(1), { type: 'tick', now: 3000 }), 3000)).toBe(
-    'Code incorrect. Dernier essai avant blocage.',
-  )
-  expect(
-    pinMessage(pinReducer(typed('1111'), { type: 'result', result: { ok: false, reason: 'banned' }, now: 0 }), 0),
-  ).toBe("Cet appareil est bloqué après 3 codes incorrects. Demandez à l'administrateur de le débloquer.")
+it('messages: wrong code with countdown, lock with a readable delay, offline', () => {
+  const wrong = pinReducer(typed('1111'), {
+    type: 'result',
+    result: { ok: false, reason: 'wrong', retryAfterMs: 3000 },
+    now: 0,
+  })
+  expect(pinMessage(wrong, 0)).toBe('Code incorrect. Nouvel essai dans 3 s')
+  expect(pinMessage(wrong, 2100)).toBe('Code incorrect. Nouvel essai dans 1 s')
+  expect(pinMessage(pinReducer(wrong, { type: 'tick', now: 3000 }), 3000)).toBe('Code incorrect.')
+  const locked = (ms: number) =>
+    pinReducer(typed('1111'), { type: 'result', result: { ok: false, reason: 'locked', retryAfterMs: ms }, now: 0 })
+  expect(pinMessage(locked(5 * HOUR), 0)).toBe('Trop de codes incorrects pour le moment. Réessayez dans 5 h.')
+  expect(pinMessage(locked(20 * 60_000), 0)).toBe('Trop de codes incorrects pour le moment. Réessayez dans 20 min.')
+  expect(pinMessage(locked(40_000), 0)).toBe('Trop de codes incorrects pour le moment. Réessayez dans 40 s.')
   expect(
     pinMessage(pinReducer(typed('2468'), { type: 'result', result: { ok: false, reason: 'offline' }, now: 0 }), 0),
   ).toBe('Connexion impossible. Le premier déverrouillage de cet appareil demande une connexion.')

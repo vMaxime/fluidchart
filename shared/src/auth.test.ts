@@ -1,8 +1,8 @@
 import { it, expect } from 'vitest'
-import { PIN_COOLDOWN_MS, PIN_LENGTH, PIN_MAX_FAILURES } from './auth'
+import * as auth from './auth'
 
-it('pins the PIN rules agreed with the author', () => {
-  expect(PIN_LENGTH).toBe(4)
-  expect(PIN_COOLDOWN_MS).toBe(3000)
-  expect(PIN_MAX_FAILURES).toBe(3)
+it('pins the PIN rules agreed with the author (no IP ban)', () => {
+  expect(auth.PIN_LENGTH).toBe(4)
+  expect(auth.PIN_COOLDOWN_MS).toBe(3000)
+  expect('PIN_MAX_FAILURES' in auth).toBe(false)
 })

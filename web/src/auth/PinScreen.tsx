@@ -20,10 +20,14 @@ export function PinScreen({ verify, onUnlock }: { verify(pin: string): Promise<P
   useEffect(() => {
     if (s.status !== 'checking') return
     let live = true
-    verify(s.digits).then(
-      (result) => live && dispatch({ type: 'result', result, now: Date.now() }),
-      () => live && dispatch({ type: 'result', result: { ok: false, reason: 'offline' }, now: Date.now() }),
-    )
+    // Refresh `now` with the answer, so the countdown starts from the right time (not the last tick).
+    const settle = (result: PinResult) => {
+      if (!live) return
+      const t = Date.now()
+      setNow(t)
+      dispatch({ type: 'result', result, now: t })
+    }
+    verify(s.digits).then(settle, () => settle({ ok: false, reason: 'offline' }))
     return () => {
       live = false
     }
@@ -34,7 +38,7 @@ export function PinScreen({ verify, onUnlock }: { verify(pin: string): Promise<P
   }, [s.status, onUnlock])
 
   useEffect(() => {
-    if (s.status !== 'cooldown') return
+    if (s.status !== 'cooldown' && s.status !== 'locked') return
     const t = setInterval(() => {
       setNow(Date.now())
       dispatch({ type: 'tick', now: Date.now() })
@@ -91,7 +95,7 @@ export function PinScreen({ verify, onUnlock }: { verify(pin: string): Promise<P
           className={[
             'pin-dots',
             shaking && 'shake',
-            s.attemptsLeft !== null && s.status !== 'open' && 'is-error',
+            s.wrong && s.status !== 'open' && 'is-error',
             s.status === 'checking' && 'is-checking',
           ]
             .filter(Boolean)
@@ -103,7 +107,7 @@ export function PinScreen({ verify, onUnlock }: { verify(pin: string): Promise<P
             <span key={i} className={i < s.digits.length ? 'is-filled' : undefined} />
           ))}
         </div>
-        <p className={s.status === 'banned' ? 'pin-msg is-banned' : 'pin-msg'} role="alert">
+        <p className={s.status === 'locked' ? 'pin-msg is-locked' : 'pin-msg'} role="alert">
           {message}
         </p>
         <div className="pin-keys">

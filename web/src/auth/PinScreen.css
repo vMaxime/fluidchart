@@ -15,7 +15,7 @@
 .pin-dots.is-checking { opacity: 0.5; }
 
 .pin-msg { min-height: 20px; max-width: 320px; margin: 14px 0 0; font-size: 13.5px; line-height: 1.4; color: var(--danger); text-align: center; font-variant-numeric: tabular-nums; }
-.pin-msg.is-banned { color: var(--text); }
+.pin-msg.is-locked { color: var(--text); }
 
 .pin-keys { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px 22px; margin-top: 10px; }
 .pin-key {

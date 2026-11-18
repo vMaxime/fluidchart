@@ -30,20 +30,19 @@ it('the on-screen keys type and erase', async () => {
   expect(verify).toHaveBeenCalledWith('1468')
 })
 
-it('a wrong code warns and freezes the keypad for the cooldown', async () => {
+it('a wrong code says so and freezes the keypad for the cooldown', async () => {
   vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
   vi.setSystemTime(0)
   const verify = vi.fn(async (): Promise<PinResult> => ({
     ok: false,
     reason: 'wrong',
-    attemptsLeft: 2,
     retryAfterMs: 3000,
   }))
   render(<PinScreen verify={verify} onUnlock={() => {}} />)
   for (const k of ['1', '1', '1', '1']) press(k)
   await flush()
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Code incorrect. Encore 2 essais avant blocage. Nouvel essai dans 3 s',
+    'Code incorrect. Nouvel essai dans 3 s',
   )
   expect(screen.getByRole('button', { name: '5' })).toBeDisabled()
   await act(async () => {
@@ -51,15 +50,15 @@ it('a wrong code warns and freezes the keypad for the cooldown', async () => {
     vi.advanceTimersByTime(3000)
   })
   expect(screen.getByRole('button', { name: '5' })).toBeEnabled()
-  expect(screen.getByRole('alert')).toHaveTextContent('Code incorrect. Encore 2 essais avant blocage.')
+  expect(screen.getByRole('alert')).toHaveTextContent('Code incorrect.')
 })
 
-it('a banned device stays blocked', async () => {
-  const verify = vi.fn(async (): Promise<PinResult> => ({ ok: false, reason: 'banned' }))
+it('too many attempts overall freezes the keypad with the delay', async () => {
+  const verify = vi.fn(async (): Promise<PinResult> => ({ ok: false, reason: 'locked', retryAfterMs: 3 * 3_600_000 }))
   render(<PinScreen verify={verify} onUnlock={() => {}} />)
   for (const k of ['9', '9', '9', '9']) press(k)
   await flush()
-  expect(screen.getByRole('alert')).toHaveTextContent('Cet appareil est bloqué')
+  expect(screen.getByRole('alert')).toHaveTextContent('Réessayez dans 3 h')
   expect(screen.getByRole('button', { name: '1' })).toBeDisabled()
 })
 
