@@ -9,6 +9,7 @@ import { Highlight } from './Highlight'
 import { notesLabel, relativeTime } from './relativeTime'
 import { RowMenu } from './RowMenu'
 import { UndoToast } from './UndoToast'
+import { SyncBadge } from '../sync/SyncBadge'
 import './BoardList.css'
 
 /**
@@ -79,6 +80,7 @@ export function BoardList() {
         <header className="home-head">
           <h1>Cartes</h1>
           {boards && <span className="home-count">{boards.length}</span>}
+          <SyncBadge />
           <button className="home-new" onClick={() => void create()}>
             <span aria-hidden="true">+</span> Nouvelle carte <kbd aria-hidden="true">N</kbd>
           </button>

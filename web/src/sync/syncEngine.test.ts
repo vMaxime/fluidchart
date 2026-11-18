@@ -5,7 +5,8 @@ import * as repo from '../db/repo'
 import { syncOnce } from './syncEngine'
 import { getSyncState } from './syncStatus'
 
-const ok = (body: SyncResponse) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+const ok = (body: SyncResponse) =>
+  new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
 beforeEach(async () => {
   await db.delete()
@@ -50,8 +51,13 @@ it('pulled rows apply only when newer, per element', async () => {
   const keep = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
   vi.setSystemTime(5000)
   await repo.updateNote(keep.id, { html: '<p>local récent</p>' })
-  const remote = (n: Note, html: string, updatedAt: number): EntityChange => ({ kind: 'note', row: { ...n, html, updatedAt } })
-  await syncOnce(async () => ok({ cursor: 9, changes: [remote(a, '<p>distant récent</p>', 3000), remote(keep, '<p>distant ancien</p>', 4000)] }))
+  const remote = (n: Note, html: string, updatedAt: number): EntityChange => ({
+    kind: 'note',
+    row: { ...n, html, updatedAt },
+  })
+  await syncOnce(async () =>
+    ok({ cursor: 9, changes: [remote(a, '<p>distant récent</p>', 3000), remote(keep, '<p>distant ancien</p>', 4000)] }),
+  )
   expect(await db.notes.get(a.id)).toMatchObject({ html: '<p>distant récent</p>', dirty: 0 })
   expect(await db.notes.get(keep.id)).toMatchObject({ html: '<p>local récent</p>' })
 })

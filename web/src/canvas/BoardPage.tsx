@@ -4,6 +4,7 @@ import { Link } from 'wouter'
 import type { Id } from '@chart/shared'
 import { getBoard } from '../db/repo'
 import { BoardCanvas } from './BoardCanvas'
+import { SyncBadge } from '../sync/SyncBadge'
 import { BoardTitle } from './BoardTitle'
 import { useJustCreated } from './useJustCreated'
 import './BoardPage.css'
@@ -20,6 +21,9 @@ export function BoardPage({ id }: { id: Id }) {
       <header>
         <Link href="/">← Cartes</Link>
         {board && <BoardTitle id={id} name={board.name} autoFocus={justCreated} />}
+        <span className="board-sync">
+          <SyncBadge />
+        </span>
       </header>
       <div className="board-body">
         {board === null && (

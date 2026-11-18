@@ -34,7 +34,10 @@ async function dirtyChanges(): Promise<EntityChange[]> {
   ]
 }
 
-const hasDirty = async () => (await Promise.all([db.boards, db.notes, db.arrows].map((t) => t.where('dirty').equals(1).count()))).some((n) => n > 0)
+const hasDirty = async () =>
+  (await Promise.all([db.boards, db.notes, db.arrows].map((t) => t.where('dirty').equals(1).count()))).some(
+    (n) => n > 0,
+  )
 
 /**
  * One round trip: push local dirty rows, pull everything after our cursor.
