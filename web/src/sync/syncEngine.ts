@@ -91,9 +91,11 @@ const LOCAL_DEBOUNCE_MS = 1000
 export function startSync(post: Post = defaultPost): () => void {
   let running = false
   let again = false
+  let stopped = false
   let debounce: ReturnType<typeof setTimeout> | undefined
 
   const run = async () => {
+    if (stopped) return
     if (running) {
       again = true
       return
@@ -102,8 +104,14 @@ export function startSync(post: Post = defaultPost): () => void {
     try {
       do {
         again = false
-        await syncOnce(post)
-      } while (again)
+        try {
+          await syncOnce(post)
+        } catch (error) {
+          // Unexpected (bad server reply, storage failure…): show it, keep the loop alive.
+          console.error('Sync failed', error)
+          setSyncState('error')
+        }
+      } while (again && !stopped)
     } finally {
       running = false
     }
@@ -133,6 +141,7 @@ export function startSync(post: Post = defaultPost): () => void {
   void run()
 
   return () => {
+    stopped = true
     for (const t of tablesList) {
       t.hook('creating').unsubscribe(onCreating)
       t.hook('updating').unsubscribe(onUpdating)

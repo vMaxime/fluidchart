@@ -82,3 +82,13 @@ it('network failure → offline, 401 → unauthorized, 500 → error; nothing lo
   expect(getSyncState()).toBe('error')
   expect((await db.boards.get(b.id))!.dirty).toBe(1)
 })
+
+it('background sync turns an unexpected failure into the error state (no unhandled rejection) and stops cleanly', async () => {
+  vi.useRealTimers()
+  const { startSync } = await import('./syncEngine')
+  const { setSyncState } = await import('./syncStatus')
+  setSyncState('synced')
+  const stop = startSync(async () => new Response('not json', { status: 200 }))
+  await vi.waitFor(() => expect(getSyncState()).toBe('error'))
+  stop()
+})
