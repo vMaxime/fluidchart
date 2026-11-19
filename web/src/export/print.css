@@ -1,0 +1,59 @@
+/* Printable board (export PDF): hidden on screen, alone on paper. */
+@media screen {
+  .print-root {
+    display: none;
+  }
+}
+@media print {
+  body > :not(.print-root) {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff;
+  }
+}
+/* Note colours and highlights print even when "print backgrounds" is off (Safari's default). */
+.print-root,
+.print-root * {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.print-page {
+  position: relative;
+  overflow: hidden;
+  break-after: page;
+  background: #fff;
+}
+.print-page:last-child {
+  break-after: auto;
+}
+.print-board {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.print-tile {
+  position: relative;
+  overflow: hidden;
+}
+.print-root .print-note {
+  position: absolute;
+  box-shadow: none;
+}
+.print-arrows {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.print-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font: 10px var(--font);
+  color: #78716c;
+  text-align: center;
+}
