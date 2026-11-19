@@ -31,6 +31,8 @@ Authentification : en-tête \`Authorization: Bearer <jeton>\` sur toutes les rou
 - \`<p style="text-align: center">\` alignement : \`center\` ou \`right\` (à gauche par défaut).
 - \`<ul>\` / \`<ol>\` avec des \`<li><p>…</p></li>\` : listes.
 
+Dans le HTML, écrivez \`&lt;\` pour un « < » et \`&amp;\` pour un « & » (ex. \`PaO2 &lt; 60 mmHg\`).
+
 Tout le reste (autres balises, attributs, styles) est retiré, le texte restant. Un texte sans aucune balise devient un paragraphe par ligne.
 
 ## Limites

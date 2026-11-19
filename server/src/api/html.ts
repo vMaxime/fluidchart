@@ -1,4 +1,6 @@
 import sanitizeHtml from 'sanitize-html'
+import { parseDocument } from 'htmlparser2'
+import type { ChildNode, Element } from 'domhandler'
 
 /** Text sizes the editor offers, in px; 14 is the normal size and carries no style. */
 const SIZES = [12, 14, 18, 22]
@@ -53,7 +55,7 @@ const paragraph: sanitizeHtml.Transformer = (_tag, attribs) => {
   const align = parseStyle(attribs.style).get('text-align')?.toLowerCase()
   const out: sanitizeHtml.Attributes = {}
   if (align === 'center' || align === 'right') out.style = `text-align: ${align};`
-  return { tagName: 'p', attribs: out }
+  return { tagName: 'div', attribs: out }
 }
 
 const span: sanitizeHtml.Transformer = (_tag, attribs) => {
@@ -74,8 +76,10 @@ const mark: sanitizeHtml.Transformer = (_tag, attribs) => {
 }
 
 const OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'br', 'strong', 'em', 'u', 'mark', 'span', 'ul', 'ol', 'li'],
-  allowedAttributes: { p: ['style'], span: ['style'], mark: ['style', 'data-color'] },
+  // Paragraphs travel as <div> until blocks() turns them back into <p>: the HTML parser would
+  // otherwise apply <p> rules (a nested <p> or a list closes it, a stray </p> adds an empty one).
+  allowedTags: ['div', 'br', 'strong', 'em', 'u', 'mark', 'span', 'ul', 'ol', 'li'],
+  allowedAttributes: { div: ['style'], span: ['style'], mark: ['style', 'data-color'] },
   allowedSchemes: [],
   // Keep the style strings built above verbatim: sanitize-html would otherwise re-serialize them
   // (`color:rgb(…)`), away from the editor's form. Only the transforms below can write a style.
@@ -100,6 +104,65 @@ const OPTIONS: sanitizeHtml.IOptions = {
 
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+/** A `<` that opens no complete tag (`PaO2<PaCO2`) is text, not the start of a tag eating the rest. */
+const LONE_LT = /<(?!\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>|!--)/g
+
+const BLOCKS = new Set(['div', 'ul', 'ol', 'li'])
+const isElement = (n: ChildNode): n is Element => n.type === 'tag'
+const isBlock = (n: ChildNode): n is Element => isElement(n) && BLOCKS.has(n.name)
+const holdsBlock = (n: ChildNode): boolean => isElement(n) && n.children.some((c) => isBlock(c) || holdsBlock(c))
+const isBlank = (n: ChildNode) => n.type === 'text' && !n.data.trim()
+
+// Parsed with decodeEntities off: text and attributes are written back exactly as sanitize-html escaped them.
+const attributes = (el: Element) =>
+  Object.entries(el.attribs)
+    .map(([k, v]) => ` ${k}="${v}"`)
+    .join('')
+const render = (n: ChildNode): string =>
+  n.type === 'text'
+    ? n.data
+    : !isElement(n)
+      ? ''
+      : n.name === 'br'
+        ? '<br>'
+        : `<${n.name}${attributes(n)}>${n.children.map(render).join('')}</${n.name}>`
+
+/**
+ * The editor's block structure: only paragraphs and lists at the top and inside list items, inline
+ * text always inside a paragraph, nothing but list items in a list. Loose inline runs become
+ * paragraphs (keeping the style of a paragraph they were unwrapped from); whitespace between
+ * blocks goes.
+ */
+function blocks(nodes: ChildNode[], style = ''): string {
+  let out = ''
+  let run: ChildNode[] = []
+  const flush = () => {
+    if (run.some((n) => !isBlank(n))) out += `<p${style}>${run.map(render).join('')}</p>`
+    run = []
+  }
+  for (const n of nodes) {
+    if (isElement(n) && (n.name === 'div' || n.name === 'li')) {
+      // A paragraph (or a list item out of any list): a <p>, unless it wraps blocks — then unwrapped.
+      flush()
+      out += holdsBlock(n)
+        ? blocks(n.children, attributes(n))
+        : `<p${attributes(n)}>${n.children.map(render).join('')}</p>`
+    } else if (isElement(n) && (n.name === 'ul' || n.name === 'ol')) {
+      flush()
+      const items = n.children.filter((c) => !isBlank(c))
+      const lis = items.map(
+        (c) => `<li>${blocks(isElement(c) && c.name === 'li' ? c.children : [c]) || '<p></p>'}</li>`,
+      )
+      out += `<${n.name}>${lis.join('')}</${n.name}>`
+    } else if (holdsBlock(n)) {
+      flush() // an inline element wrapped around blocks: keep the blocks, drop the wrapper
+      out += blocks((n as Element).children, style)
+    } else run.push(n)
+  }
+  flush()
+  return out
+}
+
 /**
  * Reduces html written by an AI (or plain text) to what a note can hold: the documented subset, in
  * the editor's own form. Nothing executable and no style outside the list survives.
@@ -107,12 +170,13 @@ const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;
 export function cleanNoteHtml(input: string): string {
   const text = input.replace(/\r\n?/g, '\n')
   if (!text.trim()) return '<p></p>'
+  const html = text.replace(LONE_LT, '&lt;').replace(/<(\/?)p(?=[\s>/])/gi, '<$1div')
   // Plain text (no tag at all): one paragraph per line.
-  if (!/<[a-zA-Z/!]/.test(text))
+  if (!/<[a-zA-Z/!]/.test(html))
     return text
       .split('\n')
       .map((line) => `<p>${escape(line)}</p>`)
       .join('')
-  const clean = sanitizeHtml(text, OPTIONS).replace(/<br \/>/g, '<br>')
-  return clean.trim() ? clean : '<p></p>'
+  const clean = sanitizeHtml(html, OPTIONS)
+  return blocks(parseDocument(clean, { decodeEntities: false }).children) || '<p></p>'
 }

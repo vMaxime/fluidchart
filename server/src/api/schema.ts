@@ -75,7 +75,8 @@ export const BoardInputSchema = z
         })
     })
     const placed = (n: { x?: number; y?: number }) => n.x !== undefined && n.y !== undefined
-    if (board.notes.some(placed)) {
+    // Any coordinate given means positions were meant: then every note needs both.
+    if (board.notes.some((n) => n.x !== undefined || n.y !== undefined)) {
       const i = board.notes.findIndex((n) => !placed(n))
       if (i >= 0)
         ctx.addIssue({

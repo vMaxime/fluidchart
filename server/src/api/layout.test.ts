@@ -57,3 +57,32 @@ it('cycles and isolated notes lay out without overlap', () => {
   expect([...at.keys()].sort()).toEqual(['a', 'b', 'c', 'd', 'e'])
   expect(overlaps(boxes, at)).toBe(false)
 })
+
+it('line breaks count as lines', () => {
+  const eight = '<p>a<br>b<br>c<br>d<br>e<br>f<br>g<br>h</p>'
+  expect(estimateNoteHeight(eight, 200)).toBeGreaterThanOrEqual(Math.ceil(24 + 8 * 1.4 * 14 + 4))
+})
+
+it('many arrows going back up lay out fast and without overlap', () => {
+  const boxes = Array.from({ length: 300 }, (_, i) => ({ id: `n${i}`, width: 200, height: 64 + (i % 5) * 20 }))
+  const arrows = [
+    ...boxes.slice(1).map((b, i) => ({ from: `n${i}`, to: b.id })),
+    ...boxes.slice(1).map((b) => ({ from: b.id, to: 'n0' })),
+  ]
+  const start = performance.now()
+  const at = layoutNotes(boxes, arrows)
+  expect(performance.now() - start).toBeLessThan(1000)
+  expect(overlaps(boxes, at)).toBe(false)
+})
+
+it('a board at the API limits (1000 notes, 2000 arrows) lays out in under 2 s', () => {
+  let seed = 7
+  const random = (n: number) => Math.floor(((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31) * n)
+  const boxes = Array.from({ length: 1000 }, (_, i) => ({ id: `n${i}`, width: 200, height: 64 + random(100) }))
+  const arrows = Array.from({ length: 2000 }, () => ({ from: `n${random(1000)}`, to: `n${random(1000)}` }))
+  const start = performance.now()
+  const at = layoutNotes(boxes, arrows)
+  expect(performance.now() - start).toBeLessThan(2000)
+  expect(at.size).toBe(1000)
+  expect(overlaps(boxes, at)).toBe(false)
+})

@@ -147,6 +147,17 @@ it('invalid boards answer 400 with the path of each problem and write nothing', 
     [{ name: 'X', notes: [notes[0], { id: 'a', html: 'B' }] }, 'notes.1.id'],
     [{ name: 'X', notes: [{ ...notes[0], x: 0, y: 0 }, notes[1]] }, 'notes.1'],
     [{ name: 'X', notes: [{ ...notes[0], color: 'red' }, notes[1]] }, 'notes.0.color'],
+    [{ name: 'X', notes: [{ ...notes[0], x: 10 }, notes[1]] }, 'notes.0'],
+    [
+      {
+        name: 'X',
+        notes: [
+          { ...notes[0], x: 10 },
+          { ...notes[1], x: 500 },
+        ],
+      },
+      'notes.0',
+    ],
     [{ name: 'X', notes: Array.from({ length: 1001 }, (_, i) => ({ id: `n${i}`, html: 'x' })) }, 'notes'],
   ]
   for (const [body, path] of cases) {
@@ -254,4 +265,21 @@ it('duplicate arrows are stored once', async () => {
     })
   ).json()) as Detail
   expect(body.arrows).toHaveLength(1)
+})
+
+// Last in this file: before the fix, these ids polluted Object.prototype for the whole process.
+it('note ids such as __proto__ or constructor are mere labels', async () => {
+  const res = await post(make(), {
+    name: 'Proto',
+    notes: ['__proto__', 'b', 'constructor', 'toString'].map((id) => ({ id, html: id })),
+    arrows: [
+      { from: '__proto__', to: 'b' },
+      { from: 'constructor', to: 'toString' },
+    ],
+  })
+  expect(res.status).toBe(201)
+  const body = (await res.json()) as Detail
+  for (const n of body.notes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
+  expect(body.arrows).toHaveLength(2)
+  expect(({} as Record<string, unknown>).b).toBeUndefined()
 })

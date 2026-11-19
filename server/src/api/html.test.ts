@@ -54,3 +54,22 @@ it('empty or emptied input gives an empty paragraph', () => {
 it("the API example is already in the editor's form", () => {
   for (const n of API_EXAMPLE_BOARD.notes) expect(cleanNoteHtml(n.html)).toBe(n.html)
 })
+
+it('block wrappers and loose text end up as editor paragraphs', () => {
+  expect(cleanNoteHtml('<div><p>Titre</p><p>texte</p></div>')).toBe('<p>Titre</p><p>texte</p>')
+  expect(cleanNoteHtml('<p>Effets<ul><li>a</li></ul></p>')).toBe('<p>Effets</p><ul><li><p>a</p></li></ul>')
+  expect(cleanNoteHtml('Intro<p>a</p>')).toBe('<p>Intro</p><p>a</p>')
+  expect(cleanNoteHtml('Titre<br>suite')).toBe('<p>Titre<br>suite</p>')
+  expect(cleanNoteHtml('<ul>\n  <li>a</li>\n  <li><b>b</b> c</li>\n</ul>\n<p>d</p>')).toBe(
+    '<ul><li><p>a</p></li><li><p><strong>b</strong> c</p></li></ul><p>d</p>',
+  )
+  expect(cleanNoteHtml('<p style="text-align:center">Titre<ul><li>x</li></ul></p>')).toBe(
+    '<p style="text-align: center;">Titre</p><ul><li><p>x</p></li></ul>',
+  )
+})
+
+it('a < that opens no tag is text, not a lost tag', () => {
+  expect(cleanNoteHtml('PaO2<PaCO2 et Na+')).toBe('<p>PaO2&lt;PaCO2 et Na+</p>')
+  expect(cleanNoteHtml('<p>PaO2<PaCO2</p>')).toBe('<p>PaO2&lt;PaCO2</p>')
+  expect(cleanNoteHtml('x<y')).toBe('<p>x&lt;y</p>')
+})
