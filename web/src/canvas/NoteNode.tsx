@@ -43,6 +43,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
       {editing ? (
         <NoteEditor
           html={note.html}
+          noteColor={note.color}
           initialInput={ctx.initialInput}
           onDraft={(html) => journalNoteHtml(note.id, html)}
           onChange={(html) =>
@@ -50,7 +51,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
               (ok) => ok && clearJournal(note.id, html),
             )
           }
-          onDone={ctx.stopEditing}
+          onDone={(finalHtml) => ctx.stopEditing(finalHtml, note.id)}
         />
       ) : (
         <div className="note-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.html) }} />

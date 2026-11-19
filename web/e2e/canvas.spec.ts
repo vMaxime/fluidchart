@@ -207,3 +207,28 @@ test('dragging a + onto another note connects them; onto empty canvas grows a no
   await expect(notes(page)).toHaveCount(3)
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
 })
+
+test('⌘Z undoes a note deletion, ⇧⌘Z redoes it', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 250 })
+  await notes(page).first().click()
+  await page.keyboard.press('Backspace')
+  await expect(notes(page)).toHaveCount(0)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(notes(page)).toHaveCount(1)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(notes(page)).toHaveCount(0)
+  await page.getByRole('button', { name: 'Annuler' }).click()
+  await expect(notes(page)).toHaveCount(1)
+})
+
+test('⌘Z while typing undoes the typing, not the canvas', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 250 } })
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(editor(page)).toBeFocused()
+  await expect(notes(page)).toHaveCount(1)
+  await expect(editor(page)).not.toContainText('Insuline')
+})

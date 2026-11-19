@@ -10,6 +10,7 @@ import {
   type Note,
   type NoteColor,
 } from '@chart/shared'
+import { extractTextColors } from '../canvas/textColors'
 import { db, type Local } from './db'
 
 // Sync contract: every write goes through this module, sets updatedAt = Date.now()
@@ -86,10 +87,20 @@ export async function deleteBoard(id: Id): Promise<void> {
   await db.transaction('rw', db.boards, db.notes, db.arrows, async () => {
     const board = await db.boards.get(id)
     if (!board) return
-    const notes = db.notes.where('boardId').equals(id).filter((n) => !n.deleted)
-    const arrows = db.arrows.where('boardId').equals(id).filter((a) => !a.deleted)
+    const notes = db.notes
+      .where('boardId')
+      .equals(id)
+      .filter((n) => !n.deleted)
+    const arrows = db.arrows
+      .where('boardId')
+      .equals(id)
+      .filter((a) => !a.deleted)
     // One timestamp for the whole deletion, so restoreBoard can find what went with it.
-    const at = nextTime(board.updatedAt, ...(await notes.toArray()).map((n) => n.updatedAt), ...(await arrows.toArray()).map((a) => a.updatedAt))
+    const at = nextTime(
+      board.updatedAt,
+      ...(await notes.toArray()).map((n) => n.updatedAt),
+      ...(await arrows.toArray()).map((a) => a.updatedAt),
+    )
     const tomb = { deleted: true, updatedAt: at, dirty: 1 as const }
     await db.boards.update(id, tomb)
     await notes.modify(tomb)
@@ -103,8 +114,14 @@ export async function restoreBoard(id: Id): Promise<void> {
     const board = await db.boards.get(id)
     if (!board?.deleted) return
     const deletedAt = board.updatedAt
-    const notes = db.notes.where('boardId').equals(id).filter((n) => n.deleted && n.updatedAt === deletedAt)
-    const arrows = db.arrows.where('boardId').equals(id).filter((a) => a.deleted && a.updatedAt === deletedAt)
+    const notes = db.notes
+      .where('boardId')
+      .equals(id)
+      .filter((n) => n.deleted && n.updatedAt === deletedAt)
+    const arrows = db.arrows
+      .where('boardId')
+      .equals(id)
+      .filter((a) => a.deleted && a.updatedAt === deletedAt)
     const alive = { deleted: false, updatedAt: nextTime(deletedAt), dirty: 1 as const }
     await db.boards.update(id, alive)
     await notes.modify(alive)
@@ -113,12 +130,20 @@ export async function restoreBoard(id: Id): Promise<void> {
 }
 
 export async function listNotes(boardId: Id): Promise<Note[]> {
-  const rows = await db.notes.where('boardId').equals(boardId).filter((n) => !n.deleted).toArray()
+  const rows = await db.notes
+    .where('boardId')
+    .equals(boardId)
+    .filter((n) => !n.deleted)
+    .toArray()
   return rows.map(strip)
 }
 
 export async function listArrows(boardId: Id): Promise<Arrow[]> {
-  const rows = await db.arrows.where('boardId').equals(boardId).filter((a) => !a.deleted).toArray()
+  const rows = await db.arrows
+    .where('boardId')
+    .equals(boardId)
+    .filter((a) => !a.deleted)
+    .toArray()
   return rows.map(strip)
 }
 
@@ -141,9 +166,18 @@ export async function updateNote(
 export async function deleteNotes(ids: Id[]): Promise<void> {
   if (ids.length === 0) return
   await db.transaction('rw', db.notes, db.arrows, async () => {
-    const notes = db.notes.where('id').anyOf(ids).filter((n) => !n.deleted)
-    const from = db.arrows.where('from').anyOf(ids).filter((a) => !a.deleted)
-    const to = db.arrows.where('to').anyOf(ids).filter((a) => !a.deleted)
+    const notes = db.notes
+      .where('id')
+      .anyOf(ids)
+      .filter((n) => !n.deleted)
+    const from = db.arrows
+      .where('from')
+      .anyOf(ids)
+      .filter((a) => !a.deleted)
+    const to = db.arrows
+      .where('to')
+      .anyOf(ids)
+      .filter((a) => !a.deleted)
     const rows = [...(await notes.toArray()), ...(await from.toArray()), ...(await to.toArray())]
     const tomb = { deleted: true, updatedAt: nextTime(...rows.map((r) => r.updatedAt)), dirty: 1 as const }
     await notes.modify(tomb)
@@ -170,8 +204,42 @@ export async function addArrow(boardId: Id, from: Id, to: Id): Promise<Arrow | n
 export async function deleteArrows(ids: Id[]): Promise<void> {
   if (ids.length === 0) return
   await db.transaction('rw', db.arrows, async () => {
-    const arrows = db.arrows.where('id').anyOf(ids).filter((a) => !a.deleted)
+    const arrows = db.arrows
+      .where('id')
+      .anyOf(ids)
+      .filter((a) => !a.deleted)
     const at = nextTime(...(await arrows.toArray()).map((a) => a.updatedAt))
     await arrows.modify({ deleted: true, updatedAt: at, dirty: 1 })
+  })
+}
+
+/** Text colours already used on live notes with this background, across every board (max 12). */
+export async function usedTextColors(noteColor: NoteColor): Promise<string[]> {
+  const notes = await db.notes.filter((n) => !n.deleted && n.color === noteColor).toArray()
+  const colors = new Set<string>()
+  for (const n of notes) for (const c of extractTextColors(n.html)) colors.add(c)
+  return [...colors].slice(0, 12)
+}
+
+export type TableName = 'boards' | 'notes' | 'arrows'
+export type Fields = Record<string, unknown>
+export type FieldChange = { table: TableName; id: Id; from: Fields; to: Fields }
+
+/**
+ * Undo / redo writes. For each field, `to[k]` is written only where the row still holds `from[k]`:
+ * a field someone changed since (another device, a write outside the history) is left alone.
+ * Written rows get a fresh updatedAt and dirty = 1, so they sync like any edit.
+ */
+export async function applyFieldChanges(changes: FieldChange[]): Promise<void> {
+  await db.transaction('rw', db.boards, db.notes, db.arrows, async () => {
+    for (const c of changes) {
+      const table = db[c.table] as unknown as typeof db.notes
+      const current = (await table.get(c.id)) as unknown as Fields | undefined
+      if (!current) continue
+      const patch: Fields = {}
+      for (const [k, v] of Object.entries(c.to)) if (current[k] === c.from[k] && current[k] !== v) patch[k] = v
+      if (Object.keys(patch).length)
+        await table.update(c.id, { ...patch, updatedAt: nextTime(current.updatedAt as number), dirty: 1 })
+    }
   })
 }

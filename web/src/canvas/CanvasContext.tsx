@@ -15,7 +15,11 @@ export const CanvasContext = createContext<{
   arrowTarget: Id | null
   freshIds: ReadonlySet<Id>
   startEditing(id: Id, initialInput?: string): void
-  stopEditing(): void
+  /**
+   * Ends editing. From the editor itself: `finalHtml` and the note `id` (one undo step per writing
+   * session). From elsewhere (pane click…): no arguments; the editor then reports its text as it closes.
+   */
+  stopEditing(finalHtml?: string, id?: Id): void
   recolor(id: Id, color: NoteColor): void
   startArrow(id: Id, e: ReactPointerEvent): void
   /** Press on a + knob: tap grows a connected note on that side, drag connects or grows where dropped. */

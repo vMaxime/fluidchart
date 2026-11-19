@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   Background,
@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css'
 import { DEFAULT_NOTE_WIDTH, type Id, type NoteColor } from '@chart/shared'
 import { addArrow, addNote, deleteArrows, deleteNotes, listArrows, listNotes, updateNote } from '../db/repo'
 import { trackWrite } from '../db/saveErrors'
+import { createHistory } from './history'
 import { ArrowPreview, useArrowDrag } from './arrowDrag'
 import { CanvasContext, type Tool } from './CanvasContext'
 import { CurveEdge } from './CurveEdge'
@@ -67,22 +68,57 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const editingId = editing?.id ?? null
   const selected = useMemo(() => nodes?.filter((n) => n.selected) ?? [], [nodes])
 
-  const startEditing = useCallback((id: Id, initialInput?: string) => setEditing({ id, initialInput }), [])
+  // Undo / redo for this board (in memory). Each user action records the rows it changed.
+  const history = useMemo(() => createHistory(), [boardId])
+  useSyncExternalStore(history.subscribe, history.version)
+
+  // A writing session (open → close) is one undo step: remember the text each note started from.
+  const sessions = useRef(new Map<Id, string>())
+  const editingRef = useRef<Id | null>(null)
+  useEffect(() => {
+    editingRef.current = editing?.id ?? null
+  }, [editing])
+  const beginEditing = useCallback((id: Id, html: string, initialInput?: string) => {
+    if (editingRef.current === id) return // already writing in it (e.g. double-click on a word)
+    if (!sessions.current.has(id)) sessions.current.set(id, html)
+    editingRef.current = id
+    setEditing({ id, initialInput })
+  }, [])
+  const startEditing = useCallback(
+    (id: Id, initialInput?: string) =>
+      beginEditing(id, getNodes().find((n) => n.id === id)?.data.note.html ?? '', initialInput),
+    [beginEditing, getNodes],
+  )
   // Leaving a note also deselects it, so a stray Backspace right after Escape cannot delete it.
-  const stopEditing = useCallback(() => {
-    setEditing((cur) => {
-      if (cur) setNodes((nds) => nds && nds.map((n) => (n.id === cur.id && n.selected ? { ...n, selected: false } : n)))
-      return null
-    })
-  }, [])
-  const recolor = useCallback((id: Id, color: NoteColor) => {
-    void trackWrite(updateNote(id, { color }))
-    setLastColor(color)
-  }, [])
+  const stopEditing = useCallback(
+    (finalHtml?: string, id?: Id) => {
+      if (finalHtml !== undefined && id !== undefined) {
+        const start = sessions.current.get(id)
+        sessions.current.delete(id)
+        // Pushed now (no await), so an Annuler clicked in the same instant undoes this step.
+        if (start !== undefined && start !== finalHtml)
+          history.push([{ table: 'notes', id, before: { html: start }, after: { html: finalHtml } }])
+      }
+      setEditing((cur) => {
+        if (!cur || (id !== undefined && cur.id !== id)) return cur // another note is being edited now
+        setNodes((nds) => nds && nds.map((n) => (n.id === cur.id && n.selected ? { ...n, selected: false } : n)))
+        editingRef.current = null
+        return null
+      })
+    },
+    [history],
+  )
+  const recolor = useCallback(
+    (id: Id, color: NoteColor) => {
+      void trackWrite(history.record(() => updateNote(id, { color })))
+      setLastColor(color)
+    },
+    [history],
+  )
 
   const arrow = useArrowDrag((from, { to }) => {
     if (!to) return // missed: stay in arrow mode, Escape to give up
-    void trackWrite(addArrow(boardId, from, to))
+    void trackWrite(history.record(() => addArrow(boardId, from, to)))
     setTool('select')
   })
 
@@ -105,15 +141,20 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const growConnected = useCallback(
     (from: Id, topLeft: XYPosition) => {
       const color = getNodes().find((n) => n.id === from)?.data.note.color ?? getLastColor()
-      void trackWrite(addNote(boardId, topLeft, color)).then((note) => {
+      void trackWrite(
+        history.record(async () => {
+          const note = await addNote(boardId, topLeft, color)
+          await addArrow(boardId, from, note.id)
+          return note
+        }),
+      ).then((note) => {
         if (!note) return
-        void trackWrite(addArrow(boardId, from, note.id))
         freshIds.current.add(note.id)
-        setEditing({ id: note.id })
+        beginEditing(note.id, note.html)
         reveal({ x: topLeft.x + DEFAULT_NOTE_WIDTH / 2, y: topLeft.y + 40 })
       })
     },
-    [boardId, getNodes, reveal],
+    [boardId, getNodes, reveal, history, beginEditing],
   )
 
   const growBeside = useCallback(
@@ -138,7 +179,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   // + knobs: tap grows beside, drag onto a note connects, drag onto empty canvas grows there.
   const knob = useArrowDrag<Side>((from, { to, at, moved }, side) => {
     if (!moved) growBeside(from, side)
-    else if (to) void trackWrite(addArrow(boardId, from, to))
+    else if (to) void trackWrite(history.record(() => addArrow(boardId, from, to)))
     else if (at) growConnected(from, { x: at.x - DEFAULT_NOTE_WIDTH / 2, y: at.y - 30 })
   })
   const drag = arrow.drag ?? knob.drag
@@ -146,21 +187,27 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const createNoteAt = useCallback(
     (clientX: number, clientY: number) => {
       const p = screenToFlowPosition({ x: clientX, y: clientY })
-      void trackWrite(addNote(boardId, { x: p.x - DEFAULT_NOTE_WIDTH / 2, y: p.y - 30 }, getLastColor())).then(
-        (note) => {
-          if (!note) return
-          freshIds.current.add(note.id)
-          setEditing({ id: note.id })
-        },
-      )
+      void trackWrite(
+        history.record(() => addNote(boardId, { x: p.x - DEFAULT_NOTE_WIDTH / 2, y: p.y - 30 }, getLastColor())),
+      ).then((note) => {
+        if (!note) return
+        freshIds.current.add(note.id)
+        beginEditing(note.id, note.html)
+      })
     },
-    [boardId, screenToFlowPosition],
+    [boardId, screenToFlowPosition, history, beginEditing],
   )
 
   // Keyboard: typing on the single selected note writes into it; otherwise V / N / A pick a tool.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e) || editingId) return
+      if (isTypingTarget(e) || editingId) return // while typing, ⌘Z belongs to the editor
+      const key = e.key.toLowerCase()
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === 'z' || key === 'y')) {
+        e.preventDefault()
+        void trackWrite(key === 'y' || e.shiftKey ? history.redo() : history.undo())
+        return
+      }
       if (selected.length === 1) {
         if (e.key === 'Enter') {
           e.preventDefault()
@@ -180,9 +227,9 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, editingId, startEditing])
+  }, [selected, editingId, startEditing, history])
 
-  // Removals go through onNodesDelete/onEdgesDelete (tombstones in the db), never local-only.
+  // Removals go through onDelete (tombstones in the db, one undo step), never local-only.
   const onNodesChange: OnNodesChange<NoteFlowNode> = useCallback((changes) => {
     for (const c of changes.getByType('remove')) changes.remove(c)
     setNodes((nds) => (nds ? changes.applyTo(nds) : nds))
@@ -191,9 +238,14 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     for (const c of changes.getByType('remove')) changes.remove(c)
     setEdges((eds) => changes.applyTo(eds))
   }, [])
-  const onNodeDragStop: OnNodeDrag<NoteFlowNode> = useCallback((_e, _node, dragged) => {
-    for (const n of dragged) void trackWrite(updateNote(n.id, { x: n.position.x, y: n.position.y }))
-  }, [])
+  const onNodeDragStop: OnNodeDrag<NoteFlowNode> = useCallback(
+    (_e, _node, dragged) => {
+      void trackWrite(
+        history.record(() => Promise.all(dragged.map((n) => updateNote(n.id, { x: n.position.x, y: n.position.y })))),
+      )
+    },
+    [history],
+  )
 
   const context = useMemo(
     () => ({
@@ -230,7 +282,14 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   return (
     <CanvasContext value={context}>
       <div className={`board-canvas tool-${tool}`}>
-        <ToolBar tool={tool} onChange={setTool} />
+        <ToolBar
+          tool={tool}
+          onChange={setTool}
+          canUndo={history.canUndo()}
+          canRedo={history.canRedo()}
+          onUndo={() => void trackWrite(history.undo())}
+          onRedo={() => void trackWrite(history.redo())}
+        />
         <div
           ref={flowRef}
           className="board-flow"
@@ -248,15 +307,23 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeDragStop={onNodeDragStop}
-            onNodeDoubleClick={(_e, node) => tool === 'select' && startEditing(node.id)}
+            onNodeDoubleClick={(_e, node) =>
+              tool === 'select' && editingRef.current !== node.id && startEditing(node.id)
+            }
             onPaneClick={(e) => {
               if (tool === 'note') {
                 createNoteAt(e.clientX, e.clientY)
                 setTool('select')
               } else stopEditing()
             }}
-            onNodesDelete={(ns) => void trackWrite(deleteNotes(ns.map((n) => n.id)))}
-            onEdgesDelete={(es) => void trackWrite(deleteArrows(es.map((e) => e.id)))}
+            onDelete={({ nodes: gone, edges: cut }) =>
+              void trackWrite(
+                history.record(async () => {
+                  await deleteNotes(gone.map((n) => n.id))
+                  await deleteArrows(cut.map((e) => e.id))
+                }),
+              )
+            }
             nodesDraggable={tool === 'select'}
             nodesConnectable={false}
             selectionOnDrag={tool === 'select'}

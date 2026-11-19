@@ -34,7 +34,30 @@ const WARM_MS = 300
  * Left tool column. Tooltips wait before the first one appears, then show instantly with no
  * animation while the pointer moves between tools (Emil Kowalski's tooltip rule).
  */
-export function ToolBar({ tool, onChange }: { tool: Tool; onChange(tool: Tool): void }) {
+const ACTIONS = [
+  {
+    key: 'undo',
+    label: 'Annuler',
+    shortcut: '⌘Z',
+    icon: <path className="stroke" d="M7 6L4 9l3 3M4 9h7a4 4 0 0 1 0 8H9" />,
+  },
+  {
+    key: 'redo',
+    label: 'Rétablir',
+    shortcut: '⇧⌘Z',
+    icon: <path className="stroke" d="M13 6l3 3-3 3M16 9H9a4 4 0 0 0 0 8h2" />,
+  },
+] as const
+
+export function ToolBar(props: {
+  tool: Tool
+  onChange(tool: Tool): void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo(): void
+  onRedo(): void
+}) {
+  const { tool, onChange } = props
   const [tip, setTip] = useState<{ index: number; instant: boolean } | null>(null)
   const showTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const coolTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -97,6 +120,42 @@ export function ToolBar({ tool, onChange }: { tool: Tool; onChange(tool: Tool): 
           )}
         </div>
       ))}
+      <span className="toolbar-sep" aria-hidden="true" />
+      {ACTIONS.map((a, j) => {
+        const i = TOOLS.length + j
+        const enabled = a.key === 'undo' ? props.canUndo : props.canRedo
+        return (
+          <div key={a.key} className="toolbar-slot">
+            <button
+              className="toolbar-btn"
+              aria-label={a.label}
+              aria-keyshortcuts={a.key === 'undo' ? 'Meta+Z' : 'Meta+Shift+Z'}
+              aria-describedby={tip?.index === i ? `tool-tip-${a.key}` : undefined}
+              disabled={!enabled}
+              onPointerEnter={() => show(i)}
+              onPointerLeave={hide}
+              onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(i)}
+              onBlur={hide}
+              onClick={a.key === 'undo' ? props.onUndo : props.onRedo}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                {a.icon}
+              </svg>
+            </button>
+            {tip?.index === i && (
+              <span
+                id={`tool-tip-${a.key}`}
+                role="tooltip"
+                className="toolbar-tip"
+                data-instant={tip.instant || undefined}
+              >
+                {a.label}
+                <kbd>{a.shortcut}</kbd>
+              </span>
+            )}
+          </div>
+        )
+      })}
     </aside>
   )
 }
