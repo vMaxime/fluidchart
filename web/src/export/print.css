@@ -20,6 +20,8 @@
   -webkit-print-color-adjust: exact;
 }
 .print-page {
+  contain: strict;
+
   position: relative;
   overflow: hidden;
   break-after: page;
@@ -35,6 +37,10 @@
   transform-origin: 0 0;
 }
 .print-tile {
+  /* Containment keeps the board drawn inside (wider than the page) out of the document's width:
+     otherwise Chrome shrinks every page to fit it, and adds a blank page. */
+  contain: strict;
+
   position: relative;
   overflow: hidden;
 }

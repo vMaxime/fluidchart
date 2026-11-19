@@ -7,6 +7,7 @@ import { BoardCanvas } from './BoardCanvas'
 import { SyncBadge } from '../sync/SyncBadge'
 import { BoardTitle } from './BoardTitle'
 import { useJustCreated } from './useJustCreated'
+import { ExportMenu } from '../export/ExportMenu'
 import './BoardPage.css'
 
 export function BoardPage({ id }: { id: Id }) {
@@ -16,27 +17,27 @@ export function BoardPage({ id }: { id: Id }) {
     const b = await getBoard(id)
     return b && !b.deleted ? b : null
   }, [id])
+  // The provider wraps the header too: the export reads note sizes measured by the canvas.
   return (
-    <div className="board-page">
-      <header>
-        <Link href="/">← Cartes</Link>
-        {board && <BoardTitle id={id} name={board.name} autoFocus={justCreated} />}
-        <span className="board-sync">
-          <SyncBadge />
-        </span>
-      </header>
-      <div className="board-body">
-        {board === null && (
-          <p className="board-missing">
-            Carte introuvable. <Link href="/">Retour aux cartes</Link>
-          </p>
-        )}
-        {board && (
-          <ReactFlowProvider>
-            <BoardCanvas boardId={id} />
-          </ReactFlowProvider>
-        )}
+    <ReactFlowProvider>
+      <div className="board-page">
+        <header>
+          <Link href="/">← Cartes</Link>
+          {board && <BoardTitle id={id} name={board.name} autoFocus={justCreated} />}
+          <span className="board-actions">
+            {board && <ExportMenu boardId={id} name={board.name} />}
+            <SyncBadge />
+          </span>
+        </header>
+        <div className="board-body">
+          {board === null && (
+            <p className="board-missing">
+              Carte introuvable. <Link href="/">Retour aux cartes</Link>
+            </p>
+          )}
+          {board && <BoardCanvas boardId={id} />}
+        </div>
       </div>
-    </div>
+    </ReactFlowProvider>
   )
 }
