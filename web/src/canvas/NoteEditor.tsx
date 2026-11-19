@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
 import type { NoteColor } from '@chart/shared'
 import { createDebouncer } from '../lib/debounce'
 import { useFlushOnHide } from '../lib/useFlushOnHide'
@@ -11,7 +10,7 @@ import './format.css'
 const SAVE_DELAY_MS = 400
 
 const stillEditing = (next: EventTarget | null) =>
-  next instanceof Element && !!next.closest('.format-menu, .note-palette')
+  next instanceof Element && !!next.closest('.note-toolbar, .note-palette')
 
 type Props = {
   html: string
@@ -25,10 +24,23 @@ type Props = {
   initialInput?: string
   /** The note's background, for the "Déjà utilisées" colours. */
   noteColor?: NoteColor
+  /** Changes the note's background from the format bar. */
+  onNoteColor?(color: NoteColor): void
+  /** Places the format bar (the canvas puts it above the note); rendered in place by default. */
+  placeBar?(bar: ReactNode): ReactNode
 }
 
 /** Rich-text editor shown inside a note while it is being edited. Saves as you type. */
-export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, noteColor = 'yellow' }: Props) {
+export function NoteEditor({
+  html,
+  onChange,
+  onDraft,
+  onDone,
+  initialInput,
+  noteColor = 'yellow',
+  onNoteColor,
+  placeBar = (bar) => bar,
+}: Props) {
   const callbacks = useRef({ onChange, onDraft, onDone })
   useEffect(() => {
     callbacks.current = { onChange, onDraft, onDone }
@@ -108,22 +120,19 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
   return (
     <div className="note-editor nodrag nopan nowheel">
       <EditorContent editor={editor} />
-      {editor && (
-        <BubbleMenu
-          editor={editor}
-          className="format-menu nodrag nopan"
-          appendTo={() => document.body}
-          options={{ placement: 'bottom', offset: 10, strategy: 'fixed' }}
-          onBlur={(e) => {
-            // TipTap wraps the event: read the native one (its relatedTarget getter throws on the wrapper).
-            const next = (e.nativeEvent as FocusEvent).relatedTarget
-            if (!document.hasFocus() || stillEditing(next) || editor.view.dom.contains(next as Node | null)) return
-            finish()
-          }}
-        >
-          <FormatControls editor={editor} noteColor={noteColor} />
-        </BubbleMenu>
-      )}
+      {editor &&
+        placeBar(
+          <div
+            className="note-toolbar nodrag nopan"
+            onBlur={(e) => {
+              const next = e.relatedTarget
+              if (!document.hasFocus() || stillEditing(next) || editor.view.dom.contains(next as Node | null)) return
+              finish()
+            }}
+          >
+            <FormatControls editor={editor} noteColor={noteColor} onNoteColor={onNoteColor} />
+          </div>,
+        )}
     </div>
   )
 }

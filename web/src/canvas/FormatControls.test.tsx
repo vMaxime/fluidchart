@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, it, expect } from 'vitest'
+import { afterEach, beforeEach, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { Editor } from '@tiptap/core'
 import type { NoteColor } from '@chart/shared'
@@ -14,10 +14,11 @@ beforeEach(async () => {
 })
 afterEach(() => editor?.destroy())
 
-function setup(html = '<p>Insuline</p>', noteColor: NoteColor = 'yellow') {
+function setup(html = '<p>Insuline</p>', noteColor: NoteColor = 'yellow', onNoteColor = vi.fn()) {
   editor = new Editor({ extensions: noteEditorExtensions, content: html })
   editor.commands.selectAll()
-  render(<FormatControls editor={editor} noteColor={noteColor} />)
+  render(<FormatControls editor={editor} noteColor={noteColor} onNoteColor={onNoteColor} />)
+  return onNoteColor
 }
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }))
 
@@ -66,4 +67,13 @@ it('alignment buttons set text-align on the paragraph', () => {
   expect(editor.getHTML()).toContain('text-align: center')
   click('Aligner à droite')
   expect(editor.getHTML()).toContain('text-align: right')
+})
+
+it('Couleur du post-it opens the six note colours and reports the choice', () => {
+  const onNoteColor = setup()
+  click('Couleur du post-it')
+  for (const name of ['Jaune', 'Rose', 'Bleu', 'Vert', 'Orange', 'Violet'])
+    expect(screen.getByRole('button', { name })).toBeInTheDocument()
+  click('Vert')
+  expect(onNoteColor).toHaveBeenCalledWith('green')
 })

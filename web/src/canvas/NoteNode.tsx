@@ -44,6 +44,13 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
         <NoteEditor
           html={note.html}
           noteColor={note.color}
+          onNoteColor={(c) => ctx.recolor(note.id, c)}
+          // While writing, the format bar takes the place of the colour palette, above the note.
+          placeBar={(bar) => (
+            <NodeToolbar isVisible position={Position.Top} offset={10}>
+              {bar}
+            </NodeToolbar>
+          )}
           initialInput={ctx.initialInput}
           onDraft={(html) => journalNoteHtml(note.id, html)}
           onChange={(html) =>
@@ -72,7 +79,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
             </svg>
           </button>
         ))}
-      <NodeToolbar isVisible={ctx.paletteFor === note.id} position={Position.Top} offset={editing ? 10 : 40}>
+      <NodeToolbar isVisible={ctx.paletteFor === note.id && !editing} position={Position.Top} offset={40}>
         <NotePalette color={note.color} onPick={(c) => ctx.recolor(note.id, c)} />
       </NodeToolbar>
     </div>

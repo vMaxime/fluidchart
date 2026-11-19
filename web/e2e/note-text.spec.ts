@@ -61,13 +61,14 @@ test('typing on a selected note opens it and appends the text', async ({ page })
   await expect(note).toHaveText('InsulineX')
 })
 
-test('selecting text shows the format bar under it; Gras persists after reload', async ({ page }) => {
+test('while writing, the format bar sits above the note (no selection needed); Gras persists after reload', async ({ page }) => {
+  const bar = page.locator('.note-toolbar')
+  const note = page.getByTestId('note')
+  await expect(bar).toBeVisible()
+  const barBox = (await bar.boundingBox())!
+  expect(barBox.y + barBox.height).toBeLessThanOrEqual((await note.boundingBox())!.y)
   await page.keyboard.type('Insuline')
   await page.keyboard.press('ControlOrMeta+A')
-  const bar = page.locator('.format-menu')
-  await expect(bar).toBeVisible()
-  const note = page.getByTestId('note')
-  expect((await bar.boundingBox())!.y).toBeGreaterThan((await note.boundingBox())!.y + 20)
   await bar.getByRole('button', { name: 'Gras' }).click()
   await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toBeFocused()
   await page.waitForTimeout(600)
@@ -78,7 +79,7 @@ test('selecting text shows the format bar under it; Gras persists after reload',
 test('picking a text colour keeps the note in edit mode', async ({ page }) => {
   await page.keyboard.type('Insuline')
   await page.keyboard.press('ControlOrMeta+A')
-  const bar = page.locator('.format-menu')
+  const bar = page.locator('.note-toolbar')
   await bar.getByRole('button', { name: 'Couleur du texte' }).click()
   await bar.getByRole('button', { name: 'Rouge' }).click()
   await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toBeFocused()
@@ -107,7 +108,7 @@ test('double-clicking a word while writing keeps one writing step', async ({ pag
   await page.waitForTimeout(600)
   // Double-click on the first word (the middle of the line is the space between the words).
   await page.getByRole('textbox', { name: 'Texte du post-it' }).getByText('alpha beta').dblclick({ position: { x: 12, y: 8 } })
-  await page.locator('.format-menu').getByRole('button', { name: 'Gras' }).click()
+  await page.locator('.note-toolbar').getByRole('button', { name: 'Gras' }).click()
   await page.keyboard.press('Escape')
   await page.keyboard.press('ControlOrMeta+z')
   await expect(page.getByTestId('note')).toHaveText('')
@@ -116,7 +117,7 @@ test('double-clicking a word while writing keeps one writing step', async ({ pag
 test('"Autre couleur…" applies the picked colour and keeps editing', async ({ page }) => {
   await page.keyboard.type('Insuline')
   await page.keyboard.press('ControlOrMeta+A')
-  const bar = page.locator('.format-menu')
+  const bar = page.locator('.note-toolbar')
   await bar.getByRole('button', { name: 'Couleur du texte' }).click()
   await bar.getByLabel('Autre couleur').fill('#123456')
   await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toBeVisible()
@@ -135,7 +136,7 @@ test('leaving the format bar for the canvas ends the edit cleanly and keeps it a
   page.on('pageerror', (e) => errors.push(e.message))
   await page.keyboard.type('Premier')
   await page.keyboard.press('ControlOrMeta+A')
-  const bar = page.locator('.format-menu')
+  const bar = page.locator('.note-toolbar')
   await bar.getByRole('button', { name: 'Couleur du texte' }).click()
   await bar.getByLabel('Autre couleur').focus()
   await page.locator('.react-flow__pane').click({ position: { x: 600, y: 400 } })

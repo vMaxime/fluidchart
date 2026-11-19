@@ -125,20 +125,21 @@ test('note tool: N then a click places a note in edit mode, then back to selecti
   await expect(page.getByRole('button', { name: 'Sélectionner' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('the colour palette sits above a new or selected note and keeps editing going', async ({ page }) => {
+test('while writing, the note colour is in the format bar; once selected, the palette sits above the note', async ({ page }) => {
   await newBoard(page)
   await page.locator('.react-flow__pane').dblclick({ position: { x: 400, y: 300 } })
   await expect(editor(page)).toBeFocused()
-  const palette = page.getByRole('group', { name: 'Couleur du post-it' })
-  await expect(palette).toBeVisible()
-  expect((await palette.boundingBox())!.y).toBeLessThan((await notes(page).first().boundingBox())!.y)
-  await palette.getByRole('button', { name: 'Vert' }).click()
+  const bar = page.locator('.note-toolbar')
+  await bar.getByRole('button', { name: 'Couleur du post-it' }).click()
+  await bar.getByRole('button', { name: 'Vert' }).click()
   await expect(notes(page).first()).toHaveAttribute('data-color', 'green')
   await expect(editor(page)).toBeFocused()
   await page.keyboard.press('Escape')
-  await expect(palette).toHaveCount(0)
+  await expect(bar).toHaveCount(0)
   await notes(page).first().click()
+  const palette = page.getByRole('group', { name: 'Couleur du post-it' })
   await expect(palette).toBeVisible()
+  expect((await palette.boundingBox())!.y).toBeLessThan((await notes(page).first().boundingBox())!.y)
   // On a selected note the palette sits above the top + knob instead of covering it.
   const knob = (await page.getByRole('button', { name: 'Nouveau post-it au-dessus' }).boundingBox())!
   expect((await palette.boundingBox())!.y + (await palette.boundingBox())!.height).toBeLessThanOrEqual(knob.y)
