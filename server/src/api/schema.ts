@@ -1,11 +1,20 @@
 import * as z from 'zod'
 import { fr } from 'zod/locales'
-import { DEFAULT_NOTE_WIDTH, NOTE_COLOR_ORDER, UNTITLED_BOARD, type NoteColor } from '@chart/shared'
+import {
+  ARROW_COLOR_ORDER,
+  DEFAULT_ARROW_COLOR,
+  DEFAULT_NOTE_WIDTH,
+  NOTE_COLOR_ORDER,
+  UNTITLED_BOARD,
+  type ArrowColor,
+  type NoteColor,
+} from '@chart/shared'
 
 // Error messages go back to whoever called the API (often an AI): in French, like the app.
 z.config(fr())
 
 const NOTE_COLORS = NOTE_COLOR_ORDER as [NoteColor, ...NoteColor[]]
+const ARROW_COLORS = ARROW_COLOR_ORDER as [ArrowColor, ...ArrowColor[]]
 const COORD = 100_000
 
 const coordinate = (axis: string) =>
@@ -41,6 +50,10 @@ export const NoteInputSchema = z.object({
 export const ArrowInputSchema = z.object({
   from: z.string().meta({ description: 'Identifiant du post-it de départ.' }),
   to: z.string().meta({ description: "Identifiant du post-it d'arrivée." }),
+  color: z
+    .enum(ARROW_COLORS)
+    .optional()
+    .meta({ description: `Couleur de la flèche (${DEFAULT_ARROW_COLOR} par défaut).` }),
 })
 
 export const BoardInputSchema = z
@@ -111,5 +124,5 @@ export const BoardDetailSchema = z.object({
       width: z.number(),
     }),
   ),
-  arrows: z.array(ArrowInputSchema),
+  arrows: z.array(z.object({ from: z.string(), to: z.string(), color: z.enum(ARROW_COLORS) })),
 })

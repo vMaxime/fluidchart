@@ -13,8 +13,17 @@ import {
   type OnNodesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { DEFAULT_NOTE_WIDTH, type Id, type NoteColor } from '@chart/shared'
-import { addArrow, addNote, deleteArrows, deleteNotes, listArrows, listNotes, updateNote } from '../db/repo'
+import { DEFAULT_NOTE_WIDTH, type ArrowColor, type Id, type NoteColor } from '@chart/shared'
+import {
+  addArrow,
+  addNote,
+  deleteArrows,
+  deleteNotes,
+  listArrows,
+  listNotes,
+  updateArrow,
+  updateNote,
+} from '../db/repo'
 import { trackWrite } from '../db/saveErrors'
 import { createHistory } from './history'
 import { ArrowPreview, useArrowDrag } from './arrowDrag'
@@ -53,7 +62,12 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const [tool, setTool] = useState<Tool>('select')
   const [editing, setEditing] = useState<{ id: Id; initialInput?: string } | null>(null)
   const freshIds = useRef(new Set<Id>())
-  const { screenToFlowPosition, getInternalNode, getNodes, getViewport, setCenter } = useReactFlow<NoteFlowNode>()
+  const { screenToFlowPosition, getInternalNode, getNodes, getEdges, getViewport, setCenter } = useReactFlow<
+    NoteFlowNode,
+    ArrowFlowEdge
+  >()
+  /** An arrow just drawn, to select once it arrives from the db (its palette then shows). */
+  const selectArrowOnArrival = useRef<Id | null>(null)
   const flowRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,11 +76,29 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     setNodes((cur) => mergeNodes(notes, cur ?? []))
   }, [notes])
   useEffect(() => {
-    if (arrows) setEdges((cur) => mergeEdges(arrows, cur))
+    if (!arrows) return
+    const pending = selectArrowOnArrival.current
+    const select = pending && arrows.some((a) => a.id === pending) ? pending : null
+    if (select) selectArrowOnArrival.current = null
+    setEdges((cur) => {
+      const next = mergeEdges(arrows, cur)
+      return select ? next.map((e) => ({ ...e, selected: e.id === select })) : next
+    })
   }, [arrows])
+
+  /** Selects a freshly drawn arrow (alone), so its colour palette shows. */
+  const selectNewArrow = useCallback(
+    (id: Id) => {
+      if (getEdges().some((e) => e.id === id)) setEdges((cur) => cur.map((e) => ({ ...e, selected: e.id === id })))
+      else selectArrowOnArrival.current = id
+      setNodes((cur) => cur && cur.map((n) => (n.selected ? { ...n, selected: false } : n)))
+    },
+    [getEdges],
+  )
 
   const editingId = editing?.id ?? null
   const selected = useMemo(() => nodes?.filter((n) => n.selected) ?? [], [nodes])
+  const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges])
 
   // Undo / redo for this board (in memory). Each user action records the rows it changed.
   const history = useMemo(() => createHistory(), [boardId])
@@ -116,9 +148,19 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     [history],
   )
 
+  const recolorArrow = useCallback(
+    (id: Id, color: ArrowColor) => void trackWrite(history.record(() => updateArrow(id, { color }))),
+    [history],
+  )
+  const drawArrow = useCallback(
+    (from: Id, to: Id) =>
+      void trackWrite(history.record(() => addArrow(boardId, from, to))).then((a) => a && selectNewArrow(a.id)),
+    [boardId, history, selectNewArrow],
+  )
+
   const arrow = useArrowDrag((from, { to }) => {
     if (!to) return // missed: stay in arrow mode, Escape to give up
-    void trackWrite(history.record(() => addArrow(boardId, from, to)))
+    drawArrow(from, to)
     setTool('select')
   })
 
@@ -179,7 +221,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   // + knobs: tap grows beside, drag onto a note connects, drag onto empty canvas grows there.
   const knob = useArrowDrag<Side>((from, { to, at, moved }, side) => {
     if (!moved) growBeside(from, side)
-    else if (to) void trackWrite(history.record(() => addArrow(boardId, from, to)))
+    else if (to) drawArrow(from, to)
     else if (at) growConnected(from, { x: at.x - DEFAULT_NOTE_WIDTH / 2, y: at.y - 30 })
   })
   const drag = arrow.drag ?? knob.drag
@@ -253,11 +295,13 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       editingId,
       initialInput: editing?.initialInput,
       paletteFor: editingId ?? (selected.length === 1 ? selected[0].id : null),
+      arrowPaletteFor: !editingId && selected.length === 0 && selectedEdges.length === 1 ? selectedEdges[0].id : null,
       arrowTarget: drag?.targetId ?? null,
       freshIds: freshIds.current,
       startEditing,
       stopEditing,
       recolor,
+      recolorArrow,
       startArrow: (id: Id, e: React.PointerEvent) => arrow.start(id, e, undefined),
       startKnob: (id: Id, side: Side, e: React.PointerEvent) => knob.start(id, e, side),
       growBeside,
@@ -267,6 +311,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       editingId,
       editing?.initialInput,
       selected,
+      selectedEdges,
       drag?.targetId,
       arrow,
       knob.start,
@@ -274,6 +319,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       startEditing,
       stopEditing,
       recolor,
+      recolorArrow,
     ],
   )
 

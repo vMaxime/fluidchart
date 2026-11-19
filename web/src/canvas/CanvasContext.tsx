@@ -1,5 +1,5 @@
 import { createContext, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Id, NoteColor } from '@chart/shared'
+import type { ArrowColor, Id, NoteColor } from '@chart/shared'
 import type { Side } from './edgeGeometry'
 
 export type Tool = 'select' | 'note' | 'arrow'
@@ -11,6 +11,8 @@ export const CanvasContext = createContext<{
   initialInput: string | undefined
   /** The note showing the colour palette: the one being edited, else the single selected one. */
   paletteFor: Id | null
+  /** The arrow showing its colour palette: the single selected arrow, when no note is selected. */
+  arrowPaletteFor: Id | null
   /** Note under the pointer while drawing an arrow. */
   arrowTarget: Id | null
   freshIds: ReadonlySet<Id>
@@ -21,6 +23,7 @@ export const CanvasContext = createContext<{
    */
   stopEditing(finalHtml?: string, id?: Id): void
   recolor(id: Id, color: NoteColor): void
+  recolorArrow(id: Id, color: ArrowColor): void
   startArrow(id: Id, e: ReactPointerEvent): void
   /** Press on a + knob: tap grows a connected note on that side, drag connects or grows where dropped. */
   startKnob(id: Id, side: Side, e: ReactPointerEvent): void
@@ -30,11 +33,13 @@ export const CanvasContext = createContext<{
   editingId: null,
   initialInput: undefined,
   paletteFor: null,
+  arrowPaletteFor: null,
   arrowTarget: null,
   freshIds: new Set(),
   startEditing() {},
   stopEditing() {},
   recolor() {},
+  recolorArrow() {},
   startArrow() {},
   startKnob() {},
   growBeside() {},

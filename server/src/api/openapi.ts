@@ -16,7 +16,7 @@ Authentification : en-tête \`Authorization: Bearer <jeton>\` sur toutes les rou
 
 1. **Un post-it par forme** (rectangle, note, bulle…) portant du texte. Recopiez le texte fidèlement, mise en forme comprise (voir plus bas).
 2. Donnez à chaque post-it un \`id\` court de votre choix (ex. \`insuline\`), unique dans la carte.
-3. **Une flèche par connecteur** entre deux formes : \`from\` = id du post-it de départ, \`to\` = id du post-it d'arrivée. Ignorez un connecteur qui n'a pas de forme à chaque bout.
+3. **Une flèche par connecteur** entre deux formes : \`from\` = id du post-it de départ, \`to\` = id du post-it d'arrivée. Ignorez un connecteur qui n'a pas de forme à chaque bout. Couleur facultative (\`color\`), la plus proche parmi \`gray\` (gris, par défaut), \`black\` (noir), \`red\` (rouge), \`blue\` (bleu), \`green\` (vert), \`purple\` (violet), \`orange\`.
 4. **Couleur du post-it** : la plus proche parmi \`yellow\` (jaune), \`pink\` (rose), \`blue\` (bleu), \`green\` (vert), \`orange\`, \`purple\` (violet). Par défaut : \`yellow\`.
 5. **Positions** : pour garder la disposition du PDF, donnez \`x\`, \`y\` (coin haut-gauche, en px, x vers la droite, y vers le bas) et \`width\` (120 à 600 px, 200 par défaut) pour **tous** les post-it. Sinon n'en donnez **aucune** : le serveur dispose la carte de haut en bas en suivant les flèches. La hauteur d'un post-it suit toujours son texte.
 6. Envoyez la carte complète en un seul appel : \`POST /api/v1/boards\`. La réponse donne la carte enregistrée et son lien (\`url\`). En cas de 400, lisez \`issues\` (chemin du problème + message), corrigez et renvoyez.

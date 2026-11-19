@@ -18,13 +18,16 @@ async function createNote(page: Page, position: { x: number; y: number }) {
 const byColor = (page: Page, c: string) => page.locator(`[data-testid="note"][data-color="${c}"]`)
 // Reads note rows straight from IndexedDB, to wait for a write to land before reloading.
 const storedNotes = (page: Page) =>
-  page.evaluate(() => new Promise<{ color: string; y: number }[]>((resolve) => {
-    const req = indexedDB.open('chart')
-    req.onsuccess = () => {
-      const all = req.result.transaction('notes').objectStore('notes').getAll()
-      all.onsuccess = () => resolve(all.result)
-    }
-  }))
+  page.evaluate(
+    () =>
+      new Promise<{ color: string; y: number }[]>((resolve) => {
+        const req = indexedDB.open('chart')
+        req.onsuccess = () => {
+          const all = req.result.transaction('notes').objectStore('notes').getAll()
+          all.onsuccess = () => resolve(all.result)
+        }
+      }),
+  )
 // locator.dragTo() sends a single mousemove, which React Flow does not treat as a node drag.
 const center = async (l: Locator) => {
   const b = (await l.boundingBox())!
@@ -66,11 +69,13 @@ test('drag, arrow and color survive a reload', async ({ page }) => {
   await notes(page).nth(1).click()
   await page.getByRole('button', { name: 'Rose' }).click()
   await dragBy(page, byColor(page, 'pink'), 0, 250)
-  await expect.poll(async () => {
-    const rows = await storedNotes(page)
-    const y = (c: string) => rows.find((r) => r.color === c)!.y
-    return y('pink') - y('yellow')
-  }).toBeGreaterThan(100)
+  await expect
+    .poll(async () => {
+      const rows = await storedNotes(page)
+      const y = (c: string) => rows.find((r) => r.color === c)!.y
+      return y('pink') - y('yellow')
+    })
+    .toBeGreaterThan(100)
   await page.reload() // fitView change le cadrage : on compare des positions relatives
   await expect(page.locator('.react-flow__edge')).toHaveCount(1)
   const yellow = (await byColor(page, 'yellow').boundingBox())!
@@ -125,7 +130,9 @@ test('note tool: N then a click places a note in edit mode, then back to selecti
   await expect(page.getByRole('button', { name: 'Sélectionner' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('while writing, the note colour is in the format bar; once selected, the palette sits above the note', async ({ page }) => {
+test('while writing, the note colour is in the format bar; once selected, the palette sits above the note', async ({
+  page,
+}) => {
   await newBoard(page)
   await page.locator('.react-flow__pane').dblclick({ position: { x: 400, y: 300 } })
   await expect(editor(page)).toBeFocused()
@@ -151,7 +158,9 @@ test('tool tooltips pop to the right of the button', async ({ page }) => {
   await button.hover()
   const tip = page.getByRole('tooltip')
   await expect(tip).toHaveText(/Ajouter une flèche/)
-  expect((await tip.boundingBox())!.x).toBeGreaterThan((await button.boundingBox())!.x + (await button.boundingBox())!.width)
+  expect((await tip.boundingBox())!.x).toBeGreaterThan(
+    (await button.boundingBox())!.x + (await button.boundingBox())!.width,
+  )
 })
 
 test('canvas stays light when the system is in dark mode', async ({ page }) => {
@@ -232,4 +241,47 @@ test('⌘Z while typing undoes the typing, not the canvas', async ({ page }) => 
   await expect(editor(page)).toBeFocused()
   await expect(notes(page)).toHaveCount(1)
   await expect(editor(page)).not.toContainText('Insuline')
+})
+
+const storedArrowColors = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<(string | undefined)[]>((resolve) => {
+        const req = indexedDB.open('chart')
+        req.onsuccess = () => {
+          const all = req.result.transaction('arrows').objectStore('arrows').getAll()
+          all.onsuccess = () =>
+            resolve(all.result.filter((a: { deleted: boolean }) => !a.deleted).map((a: { color?: string }) => a.color))
+        }
+      }),
+  )
+
+test('a new arrow shows its colour palette; the colour can be undone and survives a reload', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 200, y: 200 })
+  await createNote(page, { x: 600, y: 200 })
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
+  const palette = page.getByRole('group', { name: 'Couleur de la flèche' })
+  await expect(palette).toBeVisible()
+  await palette.getByRole('button', { name: 'Rouge' }).click()
+  const path = page.locator('.react-flow__edge path.arrow')
+  await expect(path).toHaveCSS('stroke', 'rgb(220, 38, 38)')
+
+  // Clicking the empty canvas hides the palette; clicking the arrow brings it back.
+  await page.locator('.react-flow__pane').click({ position: { x: 400, y: 450 } })
+  await expect(palette).toHaveCount(0)
+  // Click the middle of the arrow, between the two notes (the SVG group itself is not clickable).
+  const [left, right] = [(await notes(page).nth(0).boundingBox())!, (await notes(page).nth(1).boundingBox())!].sort(
+    (p, q) => p.x - q.x,
+  )
+  await page.mouse.click((left.x + left.width + right.x) / 2, left.y + left.height / 2)
+  await expect(palette).toBeVisible()
+
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(path).toHaveCSS('stroke', 'rgb(120, 113, 108)')
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(path).toHaveCSS('stroke', 'rgb(220, 38, 38)')
+  await expect.poll(() => storedArrowColors(page)).toEqual(['red'])
+  await page.reload()
+  await expect(page.locator('.react-flow__edge path.arrow')).toHaveCSS('stroke', 'rgb(220, 38, 38)')
 })

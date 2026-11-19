@@ -201,6 +201,13 @@ export async function addArrow(boardId: Id, from: Id, to: Id): Promise<Arrow | n
   })
 }
 
+export async function updateArrow(id: Id, patch: Partial<Pick<Arrow, 'color'>>): Promise<void> {
+  await db.transaction('rw', db.arrows, async () => {
+    const row = await db.arrows.get(id)
+    if (row) await db.arrows.update(id, { ...patch, updatedAt: nextTime(row.updatedAt), dirty: 1 })
+  })
+}
+
 export async function deleteArrows(ids: Id[]): Promise<void> {
   if (ids.length === 0) return
   await db.transaction('rw', db.arrows, async () => {

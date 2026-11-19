@@ -1,6 +1,7 @@
 export type Id = string
 
 export type NoteColor = 'yellow' | 'pink' | 'blue' | 'green' | 'orange' | 'purple'
+export type ArrowColor = 'gray' | 'black' | 'red' | 'blue' | 'green' | 'purple' | 'orange'
 
 /** Fields every synced entity carries. `updatedAt` drives last-write-wins. */
 export interface Entity {
@@ -27,6 +28,8 @@ export interface Arrow extends Entity {
   boardId: Id
   from: Id
   to: Id
+  /** Absent on arrows never recoloured: gray. */
+  color?: ArrowColor
 }
 
 export const DEFAULT_NOTE_WIDTH = 200

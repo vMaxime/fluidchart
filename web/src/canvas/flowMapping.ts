@@ -1,11 +1,8 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
-import type { Arrow, Note } from '@chart/shared'
+import { ARROW_COLORS, DEFAULT_ARROW_COLOR, type Arrow, type ArrowColor, type Note } from '@chart/shared'
 
 export type NoteFlowNode = Node<{ note: Note }, 'note'>
-export type ArrowFlowEdge = Edge<Record<string, never>, 'curve'>
-
-/** Stone-500: soft like the Flux prototype, still readable on the light canvas. */
-export const ARROW_COLOR = '#78716c'
+export type ArrowFlowEdge = Edge<{ color: ArrowColor }, 'curve'>
 
 /**
  * Rebuild React Flow nodes from the db, keeping local-only UI state
@@ -30,12 +27,16 @@ export function mergeNodes(notes: Note[], current: NoteFlowNode[]): NoteFlowNode
 
 export function mergeEdges(arrows: Arrow[], current: ArrowFlowEdge[]): ArrowFlowEdge[] {
   const byId = new Map(current.map((e) => [e.id, e]))
-  return arrows.map((a) => ({
-    id: a.id,
-    source: a.from,
-    target: a.to,
-    type: 'curve',
-    markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLOR, width: 16, height: 16 },
-    selected: byId.get(a.id)?.selected ?? false,
-  }))
+  return arrows.map((a) => {
+    const color = a.color ?? DEFAULT_ARROW_COLOR
+    return {
+      id: a.id,
+      source: a.from,
+      target: a.to,
+      type: 'curve',
+      markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLORS[color], width: 16, height: 16 },
+      data: { color },
+      selected: byId.get(a.id)?.selected ?? false,
+    }
+  })
 }
