@@ -43,6 +43,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
       {editing ? (
         <NoteEditor
           html={note.html}
+          noteColor={note.color}
           initialInput={ctx.initialInput}
           onDraft={(html) => journalNoteHtml(note.id, html)}
           onChange={(html) =>

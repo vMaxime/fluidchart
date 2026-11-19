@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import { BubbleMenu } from '@tiptap/react/menus'
+import type { NoteColor } from '@chart/shared'
 import { createDebouncer } from '../lib/debounce'
 import { useFlushOnHide } from '../lib/useFlushOnHide'
+import { noteEditorExtensions } from './editorExtensions'
+import { FormatControls } from './FormatControls'
+import './format.css'
 
 const SAVE_DELAY_MS = 400
+
+const stillEditing = (next: EventTarget | null) =>
+  next instanceof Element && !!next.closest('.format-menu, .note-palette')
 
 type Props = {
   html: string
@@ -15,10 +22,12 @@ type Props = {
   onDone(): void
   /** Text typed on a selected note before the editor opened (type-to-edit): appended once focused. */
   initialInput?: string
+  /** The note's background, for the "Déjà utilisées" colours. */
+  noteColor?: NoteColor
 }
 
 /** Rich-text editor shown inside a note while it is being edited. Saves as you type. */
-export function NoteEditor({ html, onChange, onDraft, onDone, initialInput }: Props) {
+export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, noteColor = 'yellow' }: Props) {
   const callbacks = useRef({ onChange, onDraft, onDone })
   useEffect(() => {
     callbacks.current = { onChange, onDraft, onDone }
@@ -33,7 +42,7 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput }: Pr
   }
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: noteEditorExtensions,
     content: html,
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': 'Texte du post-it', 'aria-multiline': 'true' },
@@ -48,7 +57,10 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput }: Pr
       callbacks.current.onDraft?.(next)
       debouncer.call(next)
     },
-    onBlur: () => finish(),
+    // Focus moving into the format bar (or the note's colour palette) is not leaving the note.
+    onBlur: ({ event }) => {
+      if (!stillEditing((event as FocusEvent).relatedTarget)) finish()
+    },
   })
 
   // React Flow renders a new node with `visibility: hidden` until it is measured, and a hidden
@@ -82,6 +94,19 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput }: Pr
   return (
     <div className="note-editor nodrag nopan nowheel">
       <EditorContent editor={editor} />
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          className="format-menu nodrag nopan"
+          appendTo={() => document.body}
+          options={{ placement: 'bottom', offset: 10, strategy: 'fixed' }}
+          onBlur={(e) => {
+            if (!stillEditing(e.relatedTarget) && !editor.view.dom.contains(e.relatedTarget as Node | null)) finish()
+          }}
+        >
+          <FormatControls editor={editor} noteColor={noteColor} />
+        </BubbleMenu>
+      )}
     </div>
   )
 }
