@@ -2,7 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import type { Config } from '../config'
-import { listBoards } from './boards'
+import { createBoard, listBoards, readBoard } from './boards'
+import { BoardInputSchema } from './schema'
 
 const digest = (s: string) => createHash('sha256').update(s).digest()
 
@@ -33,6 +34,27 @@ export function createApiRoutes({ db, config }: { db: DatabaseSync; config: Conf
   api.use('/boards/*', requireToken)
 
   api.get('/boards', (c) => c.json(listBoards(db)))
+
+  api.post('/boards', async (c) => {
+    const invalid = Symbol()
+    const body: unknown = await c.req.json().catch(() => invalid)
+    if (body === invalid) return c.json({ error: 'invalid json' }, 400)
+    const parsed = BoardInputSchema.safeParse(body)
+    if (!parsed.success)
+      return c.json(
+        {
+          error: 'invalid board',
+          issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        },
+        400,
+      )
+    return c.json(createBoard(db, parsed.data, Date.now(), publicOrigin(c, config)), 201)
+  })
+
+  api.get('/boards/:id', (c) => {
+    const board = readBoard(db, c.req.param('id'), publicOrigin(c, config))
+    return board ? c.json(board) : c.json({ error: 'not found' }, 404)
+  })
 
   return api
 }
