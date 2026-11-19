@@ -11,11 +11,20 @@ import type { createAuth } from './auth'
 import type { Config } from './config'
 import { resetServerId } from './db'
 import { applyChanges, changesSince, serverId } from './store'
+import { createApiRoutes } from './api/routes'
 
 const COOKIE = 'chart_session'
 const YEAR_S = 365 * 24 * 3600
 
-export function createApp({ db, auth, config }: { db: DatabaseSync; auth: ReturnType<typeof createAuth>; config: Config }) {
+export function createApp({
+  db,
+  auth,
+  config,
+}: {
+  db: DatabaseSync
+  auth: ReturnType<typeof createAuth>
+  config: Config
+}) {
   const app = new Hono()
 
   /** The client IP: the socket, or the proxy's X-Forwarded-For only when the proxy is trusted. */
@@ -35,7 +44,8 @@ export function createApp({ db, auth, config }: { db: DatabaseSync; auth: Return
   app.use('/api/*', bodyLimit({ maxSize: 5 * 1024 * 1024, onError: (c) => c.json({ error: 'too large' }, 413) }))
   // JSON-only POSTs: with SameSite=Lax cookies this shuts out cross-site form posts.
   app.use('/api/*', async (c, next) => {
-    if (c.req.method === 'POST' && !c.req.header('content-type')?.startsWith('application/json')) return c.json({ error: 'json only' }, 415)
+    if (c.req.method === 'POST' && !c.req.header('content-type')?.startsWith('application/json'))
+      return c.json({ error: 'json only' }, 415)
     await next()
   })
 
@@ -43,7 +53,14 @@ export function createApp({ db, auth, config }: { db: DatabaseSync; auth: Return
     const body = (await c.req.json().catch(() => null)) as { pin?: unknown } | null
     if (typeof body?.pin !== 'string') return c.json({ error: 'pin required' }, 400)
     const { result, token } = auth.attempt(ipOf(c), body.pin)
-    if (token) setCookie(c, COOKIE, token, { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: YEAR_S, secure: config.cookieSecure })
+    if (token)
+      setCookie(c, COOKIE, token, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        path: '/',
+        maxAge: YEAR_S,
+        secure: config.cookieSecure,
+      })
     return c.json(result)
   })
 
@@ -67,6 +84,8 @@ export function createApp({ db, auth, config }: { db: DatabaseSync; auth: Return
       resetServerId(db)
       return c.body(null, 204)
     })
+
+  app.route('/api/v1', createApiRoutes({ db, config }))
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404))
 

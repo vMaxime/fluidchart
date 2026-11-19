@@ -13,6 +13,7 @@ Un Lucidchart minimaliste pour réviser. On y crée des cartes, on y pose des po
 - **Texte des post-it :** éditeur riche (TipTap). Pendant l'écriture, une barre de mise en forme remplace la palette au-dessus du post-it ; elle porte aussi la couleur du post-it. Le texte est enregistré au fil de la frappe, avec une copie de secours locale en cas de fermeture brutale.
 - **Hors ligne :** l'app est installable et garde ses données dans le navigateur (IndexedDB). La synchro avec le serveur se fait en arrière-plan. Pour chaque élément, la dernière modification gagne.
 - **Accès :** un écran de code (pavé numérique) impose un délai entre deux essais, le même côté app et côté serveur. Un plafond global limite le nombre d'essais.
+- **API pour une IA :** une route crée une carte complète (post-it, couleurs, texte mis en forme, flèches) en un appel. Par exemple, une IA à qui l'on donne le PDF d'une carte Lucidchart peut la recréer. La carte arrive ensuite sur les appareils par la synchro.
 
 ## Organisation
 
@@ -47,6 +48,27 @@ npm -w web run e2e     # Chromium et WebKit, contre le vrai serveur (base jetabl
 Le dépôt fournit une image Docker (`Dockerfile`, `docker-compose.yml`), à placer derrière un reverse proxy HTTPS. Deux exemples sont dans `deploy/` : Caddy, et nginx pour un nginx déjà en place. La configuration passe par des variables d'environnement : partez de `.env.example`.
 
 Derrière un reverse proxy, mettez `TRUST_PROXY=1` et ne publiez pas le port de l'app. Le proxy doit **remplacer** l'en-tête `X-Forwarded-For` et non le compléter : le délai entre deux essais de code se calcule sur cette IP.
+
+## API pour une IA
+
+L'API est désactivée tant que le serveur n'a pas de jeton. Pour l'activer, mettez dans `.env` une variable `API_TOKEN` d'au moins 32 caractères (par exemple la sortie de `openssl rand -hex 32`). Ce jeton n'a rien à voir avec le code d'accès.
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/v1/openapi.json` | La documentation OpenAPI, publique, avec un exemple complet. C'est elle qu'on donne à l'IA. |
+| `POST /api/v1/boards` | Crée une carte complète. Sans positions, le serveur dispose les post-it selon les flèches. |
+| `GET /api/v1/boards` | Liste les cartes. |
+| `GET /api/v1/boards/{id}` | Lit une carte, dans la forme que `POST` accepte. |
+
+Toutes les routes, sauf la documentation, demandent l'en-tête `Authorization: Bearer <jeton>` :
+
+```bash
+curl -X POST https://votre-domaine/api/v1/boards \
+  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  --data @carte.json
+```
+
+Le serveur nettoie le texte reçu : il ne garde que la mise en forme de l'éditeur (gras, italique, souligné, surlignage, couleur, taille, alignement, listes).
 
 ## Secrets
 
