@@ -19,14 +19,10 @@ const coordinate = (axis: string) =>
     })
 
 export const NoteInputSchema = z.object({
-  id: z
-    .string()
-    .min(1)
-    .max(100)
-    .meta({
-      description:
-        'Identifiant choisi par vous, unique dans la carte. Les flèches désignent les post-it par cet identifiant.',
-    }),
+  id: z.string().min(1).max(100).meta({
+    description:
+      'Identifiant choisi par vous, unique dans la carte. Les flèches désignent les post-it par cet identifiant.',
+  }),
   html: z.string().max(20_000).meta({
     description:
       'Texte du post-it : HTML du sous-ensemble documenté, ou texte brut (une ligne = un paragraphe). Le serveur nettoie le reste.',

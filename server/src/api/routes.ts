@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import type { Config } from '../config'
 import { createBoard, listBoards, readBoard } from './boards'
+import { openApiDocument } from './openapi'
 import { BoardInputSchema } from './schema'
 
 const digest = (s: string) => createHash('sha256').update(s).digest()
@@ -32,6 +33,9 @@ export function createApiRoutes({ db, config }: { db: DatabaseSync; config: Conf
   }
   api.use('/boards', requireToken)
   api.use('/boards/*', requireToken)
+
+  // Public: the document holds no secret, and it is what one hands to an AI.
+  api.get('/openapi.json', (c) => c.json(openApiDocument(publicOrigin(c, config))))
 
   api.get('/boards', (c) => c.json(listBoards(db)))
 
