@@ -28,7 +28,12 @@ function strip<T>(row: Local<T>): T {
   return rest as T
 }
 
-const touched = () => ({ updatedAt: Date.now(), dirty: 1 as const })
+/**
+ * The updatedAt for a write: now, but always after every version it replaces. Last-write-wins needs
+ * each edit to look newer than what it overwrites, even when this device's clock is behind the
+ * device that wrote the previous version.
+ */
+const nextTime = (...previous: number[]) => Math.max(Date.now(), ...previous.map((t) => t + 1))
 
 export async function listBoards(): Promise<BoardSummary[]> {
   const [boards, notes, arrows] = await Promise.all([db.boards.toArray(), db.notes.toArray(), db.arrows.toArray()])
@@ -73,16 +78,22 @@ export async function renameBoard(id: Id, name: string): Promise<void> {
     const row = await db.boards.get(id)
     // An unchanged name must not bump updatedAt: under last-write-wins it would undo a real rename elsewhere.
     if (!row || row.name === next) return
-    await db.boards.update(id, { name: next, ...touched() })
+    await db.boards.update(id, { name: next, updatedAt: nextTime(row.updatedAt), dirty: 1 })
   })
 }
 
 export async function deleteBoard(id: Id): Promise<void> {
   await db.transaction('rw', db.boards, db.notes, db.arrows, async () => {
-    const tomb = { deleted: true, ...touched() }
+    const board = await db.boards.get(id)
+    if (!board) return
+    const notes = db.notes.where('boardId').equals(id).filter((n) => !n.deleted)
+    const arrows = db.arrows.where('boardId').equals(id).filter((a) => !a.deleted)
+    // One timestamp for the whole deletion, so restoreBoard can find what went with it.
+    const at = nextTime(board.updatedAt, ...(await notes.toArray()).map((n) => n.updatedAt), ...(await arrows.toArray()).map((a) => a.updatedAt))
+    const tomb = { deleted: true, updatedAt: at, dirty: 1 as const }
     await db.boards.update(id, tomb)
-    await db.notes.where('boardId').equals(id).filter((n) => !n.deleted).modify(tomb)
-    await db.arrows.where('boardId').equals(id).filter((a) => !a.deleted).modify(tomb)
+    await notes.modify(tomb)
+    await arrows.modify(tomb)
   })
 }
 
@@ -92,10 +103,12 @@ export async function restoreBoard(id: Id): Promise<void> {
     const board = await db.boards.get(id)
     if (!board?.deleted) return
     const deletedAt = board.updatedAt
-    const alive = { deleted: false, ...touched() }
+    const notes = db.notes.where('boardId').equals(id).filter((n) => n.deleted && n.updatedAt === deletedAt)
+    const arrows = db.arrows.where('boardId').equals(id).filter((a) => a.deleted && a.updatedAt === deletedAt)
+    const alive = { deleted: false, updatedAt: nextTime(deletedAt), dirty: 1 as const }
     await db.boards.update(id, alive)
-    await db.notes.where('boardId').equals(id).filter((n) => n.deleted && n.updatedAt === deletedAt).modify(alive)
-    await db.arrows.where('boardId').equals(id).filter((a) => a.deleted && a.updatedAt === deletedAt).modify(alive)
+    await notes.modify(alive)
+    await arrows.modify(alive)
   })
 }
 
@@ -119,16 +132,23 @@ export async function updateNote(
   id: Id,
   patch: Partial<Pick<Note, 'x' | 'y' | 'width' | 'color' | 'html'>>,
 ): Promise<void> {
-  await db.notes.update(id, { ...patch, ...touched() })
+  await db.transaction('rw', db.notes, async () => {
+    const row = await db.notes.get(id)
+    if (row) await db.notes.update(id, { ...patch, updatedAt: nextTime(row.updatedAt), dirty: 1 })
+  })
 }
 
 export async function deleteNotes(ids: Id[]): Promise<void> {
   if (ids.length === 0) return
   await db.transaction('rw', db.notes, db.arrows, async () => {
-    const tomb = { deleted: true, ...touched() }
-    await db.notes.where('id').anyOf(ids).filter((n) => !n.deleted).modify(tomb)
-    await db.arrows.where('from').anyOf(ids).filter((a) => !a.deleted).modify(tomb)
-    await db.arrows.where('to').anyOf(ids).filter((a) => !a.deleted).modify(tomb)
+    const notes = db.notes.where('id').anyOf(ids).filter((n) => !n.deleted)
+    const from = db.arrows.where('from').anyOf(ids).filter((a) => !a.deleted)
+    const to = db.arrows.where('to').anyOf(ids).filter((a) => !a.deleted)
+    const rows = [...(await notes.toArray()), ...(await from.toArray()), ...(await to.toArray())]
+    const tomb = { deleted: true, updatedAt: nextTime(...rows.map((r) => r.updatedAt)), dirty: 1 as const }
+    await notes.modify(tomb)
+    await from.modify(tomb)
+    await to.modify(tomb)
   })
 }
 
@@ -149,5 +169,9 @@ export async function addArrow(boardId: Id, from: Id, to: Id): Promise<Arrow | n
 
 export async function deleteArrows(ids: Id[]): Promise<void> {
   if (ids.length === 0) return
-  await db.arrows.where('id').anyOf(ids).filter((a) => !a.deleted).modify({ deleted: true, ...touched() })
+  await db.transaction('rw', db.arrows, async () => {
+    const arrows = db.arrows.where('id').anyOf(ids).filter((a) => !a.deleted)
+    const at = nextTime(...(await arrows.toArray()).map((a) => a.updatedAt))
+    await arrows.modify({ deleted: true, updatedAt: at, dirty: 1 })
+  })
 }

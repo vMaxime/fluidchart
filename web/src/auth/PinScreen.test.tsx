@@ -41,9 +41,7 @@ it('a wrong code says so and freezes the keypad for the cooldown', async () => {
   render(<PinScreen verify={verify} onUnlock={() => {}} />)
   for (const k of ['1', '1', '1', '1']) press(k)
   await flush()
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Code incorrect. Nouvel essai dans 3 s',
-  )
+  expect(screen.getByRole('alert')).toHaveTextContent('Code incorrect. Nouvel essai dans 3 s')
   expect(screen.getByRole('button', { name: '5' })).toBeDisabled()
   await act(async () => {
     vi.setSystemTime(3000)

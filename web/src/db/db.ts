@@ -8,6 +8,8 @@ export class ChartDB extends Dexie {
   declare boards: Table<Local<Board>, Id>
   declare notes: Table<Local<Note>, Id>
   declare arrows: Table<Local<Arrow>, Id>
+  /** Local sync bookkeeping: 'cursor' (number) and 'serverId' (string). */
+  declare meta: Table<{ key: string; value: number | string }, string>
 
   constructor() {
     super('chart')
@@ -16,6 +18,7 @@ export class ChartDB extends Dexie {
       notes: 'id, boardId, dirty',
       arrows: 'id, boardId, from, to, dirty',
     })
+    this.version(2).stores({ meta: 'key' })
   }
 }
 

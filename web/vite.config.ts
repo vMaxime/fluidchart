@@ -30,6 +30,8 @@ export default defineConfig({
       },
     }),
   ],
+  // In development the API runs separately (npm -w server run dev).
+  server: { proxy: { '/api': 'http://localhost:8787' } },
   test: {
     environment: 'jsdom',
     setupFiles: ['src/test/setup.ts'],

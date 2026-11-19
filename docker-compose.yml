@@ -1,0 +1,13 @@
+services:
+  chart:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Only reachable from the VPS itself: Caddy (HTTPS) is the public entry point.
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - chart-data:/data
+
+volumes:
+  chart-data:

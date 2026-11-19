@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('create, rename, search, delete and undo a board', async ({ page }) => {
   await page.goto('/')
@@ -29,6 +29,7 @@ test('create, rename, search, delete and undo a board', async ({ page }) => {
 
 test('keyboard: N creates, / searches, ↓ then Enter opens', async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Nouvelle carte' })).toBeVisible() // list ready (session checked)
   for (const name of ['Cardiologie', 'Néphrologie']) {
     await page.keyboard.press('n')
     const title = page.getByRole('textbox', { name: 'Nom de la carte' })
