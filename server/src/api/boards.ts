@@ -1,5 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { newArrow, newBoard, newNote, type Arrow, type Board, type Note, type NoteColor } from '@chart/shared'
+import {
+  DEFAULT_ARROW_COLOR,
+  newArrow,
+  newBoard,
+  newNote,
+  type Arrow,
+  type ArrowColor,
+  type Board,
+  type Note,
+  type NoteColor,
+} from '@chart/shared'
 import { applyChanges } from '../store'
 import { cleanNoteHtml } from './html'
 import { estimateNoteHeight, layoutNotes } from './layout'
@@ -38,7 +48,7 @@ export type BoardDetail = {
   url: string
   /** Sorted top to bottom, then left to right. */
   notes: { id: string; html: string; color: NoteColor; x: number; y: number; width: number }[]
-  arrows: { from: string; to: string }[]
+  arrows: { from: string; to: string; color: ArrowColor }[]
 }
 
 const live = (db: DatabaseSync, kind: 'note' | 'arrow', boardId: string) =>
@@ -70,7 +80,7 @@ export function readBoard(db: DatabaseSync, id: string, origin: string): BoardDe
     arrows: (live(db, 'arrow', id) as Arrow[])
       .filter((a) => order.has(a.from) && order.has(a.to))
       .sort((a, b) => order.get(a.from)! - order.get(b.from)! || order.get(a.to)! - order.get(b.to)!)
-      .map(({ from, to }) => ({ from, to })),
+      .map(({ from, to, color }) => ({ from, to, color: color ?? DEFAULT_ARROW_COLOR })),
   }
 }
 
@@ -100,7 +110,10 @@ export function createBoard(db: DatabaseSync, input: BoardInput, now: number, or
     width: n.width,
     html: html[i],
   }))
-  const arrowRows = arrows.map((a) => newArrow(board.id, ids.get(a.from)!, ids.get(a.to)!, now))
+  const arrowRows: Arrow[] = arrows.map((a) => ({
+    ...newArrow(board.id, ids.get(a.from)!, ids.get(a.to)!, now),
+    ...(a.color && { color: a.color }),
+  }))
   applyChanges(db, [
     { kind: 'board', row: board },
     ...notes.map((row) => ({ kind: 'note', row }) as const),

@@ -26,7 +26,7 @@ type Detail = {
   updatedAt: number
   url: string
   notes: { id: string; html: string; color: string; x: number; y: number; width: number }[]
-  arrows: { from: string; to: string }[]
+  arrows: { from: string; to: string; color: string }[]
 }
 const read = async (app: ReturnType<typeof make>, id: string) =>
   (await (await app.request(`/api/v1/boards/${id}`, bearer())).json()) as Detail
@@ -116,7 +116,7 @@ it('without positions the notes are laid out top-down along the arrows', async (
   const parent = body.notes.find((n) => n.html === '<p>Hyperglycémie</p>')!
   const enfant = body.notes.find((n) => n.html === '<p>Insuline</p>')!
   expect(parent.y + 64).toBeLessThan(enfant.y)
-  expect(body.arrows).toEqual([{ from: parent.id, to: enfant.id }])
+  expect(body.arrows).toEqual([{ from: parent.id, to: enfant.id, color: 'gray' }])
 })
 
 it('given positions are kept as is', async () => {
@@ -144,6 +144,7 @@ it('invalid boards answer 400 with the path of each problem and write nothing', 
   const cases: [unknown, string][] = [
     [{ name: 'X', notes, arrows: [{ from: 'a', to: 'z' }] }, 'arrows.0.to'],
     [{ name: 'X', notes, arrows: [{ from: 'a', to: 'a' }] }, 'arrows.0'],
+    [{ name: 'X', notes, arrows: [{ from: 'a', to: 'b', color: 'pink' }] }, 'arrows.0.color'],
     [{ name: 'X', notes: [notes[0], { id: 'a', html: 'B' }] }, 'notes.1.id'],
     [{ name: 'X', notes: [{ ...notes[0], x: 0, y: 0 }, notes[1]] }, 'notes.1'],
     [{ name: 'X', notes: [{ ...notes[0], color: 'red' }, notes[1]] }, 'notes.0.color'],
@@ -282,4 +283,19 @@ it('note ids such as __proto__ or constructor are mere labels', async () => {
   for (const n of body.notes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
   expect(body.arrows).toHaveLength(2)
   expect(({} as Record<string, unknown>).b).toBeUndefined()
+})
+
+it('arrows keep their colour; without one they are gray', async () => {
+  const app = make()
+  const body = (await (
+    await post(app, {
+      name: 'Couleurs',
+      notes: ['a', 'b', 'c'].map((id, i) => ({ id, html: id, x: 0, y: i * 200 })),
+      arrows: [
+        { from: 'a', to: 'b', color: 'red' },
+        { from: 'b', to: 'c' },
+      ],
+    })
+  ).json()) as Detail
+  expect(body.arrows.map((a) => a.color)).toEqual(['red', 'gray'])
 })

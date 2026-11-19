@@ -9,7 +9,7 @@ Un Lucidchart minimaliste pour réviser. On y crée des cartes, on y pose des po
   - outils Sélection (V), Post-it (N) et Flèche (A), avec une infobulle pour chacun ;
   - des « + » sur les bords d'un post-it pour créer et relier le suivant ;
   - une palette de couleurs au-dessus du post-it sélectionné ;
-  - des flèches courbes qui suivent les post-it.
+  - des flèches courbes qui suivent les post-it, avec une palette de couleurs sur la flèche sélectionnée ou juste tracée.
 - **Texte des post-it :** éditeur riche (TipTap). Pendant l'écriture, une barre de mise en forme remplace la palette au-dessus du post-it ; elle porte aussi la couleur du post-it. Le texte est enregistré au fil de la frappe, avec une copie de secours locale en cas de fermeture brutale.
 - **Hors ligne :** l'app est installable et garde ses données dans le navigateur (IndexedDB). La synchro avec le serveur se fait en arrière-plan. Pour chaque élément, la dernière modification gagne.
 - **Accès :** un écran de code (pavé numérique) impose un délai entre deux essais, le même côté app et côté serveur. Un plafond global limite le nombre d'essais.

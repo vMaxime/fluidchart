@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { MarkerType } from '@xyflow/react'
-import { newArrow, newNote } from '@chart/shared'
-import { ARROW_COLOR, mergeEdges, mergeNodes } from './flowMapping'
+import { ARROW_COLORS, newArrow, newNote } from '@chart/shared'
+import { mergeEdges, mergeNodes } from './flowMapping'
 const note = { ...newNote('b', { x: 10, y: 10 }, 'yellow', 0), id: 'n1' }
 const arrow = { ...newArrow('b', 'n1', 'n2', 0), id: 'a1' }
 
@@ -32,14 +32,15 @@ it('drops nodes whose note is gone', () => {
   const current = [{ id: 'old', type: 'note', position: { x: 0, y: 0 }, data: { note } }] as any
   expect(mergeNodes([note], current).map((n) => n.id)).toEqual(['n1'])
 })
-it('mergeEdges maps arrows to curved edges with a closed arrow head in the arrow colour', () => {
+it('mergeEdges maps arrows to curved edges with a closed arrow head; no colour means gray', () => {
   expect(mergeEdges([arrow], [])).toEqual([
     {
       id: 'a1',
       source: 'n1',
       target: 'n2',
       type: 'curve',
-      markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLOR, width: 16, height: 16 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: ARROW_COLORS.gray, width: 16, height: 16 },
+      data: { color: 'gray' },
       selected: false,
     },
   ])
@@ -47,4 +48,10 @@ it('mergeEdges maps arrows to curved edges with a closed arrow head in the arrow
 it('mergeEdges keeps selection', () => {
   const current = [{ id: 'a1', source: 'n1', target: 'n2', selected: true }] as any
   expect(mergeEdges([arrow], current)[0].selected).toBe(true)
+})
+
+it('mergeEdges colours an arrow and its head', () => {
+  const [edge] = mergeEdges([{ ...arrow, color: 'red' }], [])
+  expect(edge.data).toEqual({ color: 'red' })
+  expect(edge.markerEnd).toMatchObject({ color: ARROW_COLORS.red })
 })

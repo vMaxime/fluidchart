@@ -27,8 +27,10 @@
 .note-in { animation: note-in 180ms var(--ease-out); transform-origin: center; }
 
 /* Arrows */
-.react-flow__edge .arrow { stroke: #78716c; stroke-width: 1.5; }
-.react-flow__edge.selected .arrow, .arrow.selected { stroke: var(--accent); }
+/* The stroke colour is the arrow's own (inline); selection thickens it and adds a halo. */
+.react-flow__edge .arrow { stroke-width: 1.5; }
+.react-flow__edge.selected .arrow, .arrow.selected { stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(37 99 235 / 0.55)); }
+.arrow-palette-anchor { position: absolute; pointer-events: all; z-index: 10; }
 .arrow-preview { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .arrow-preview line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .arrow-preview circle { fill: var(--accent); }
@@ -88,7 +90,7 @@
 @keyframes hint-in { from { opacity: 0; transform: translateX(-50%) translateY(4px); } }
 
 /* Colour palette above the focused note */
-.note-palette {
+.note-palette, .arrow-palette {
   display: flex; gap: 6px; padding: 6px 8px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -97,17 +99,17 @@
   transform-origin: bottom center;
   animation: palette-in 150ms var(--ease-out);
 }
-.note-palette button {
+.note-palette button, .arrow-palette button {
   width: 18px; height: 18px; padding: 0;
   border-radius: 50%; border: 1px solid rgb(0 0 0 / 0.12);
   transition: transform 160ms var(--ease-out);
 }
-.note-palette button:active { transform: scale(0.9); }
-.note-palette button.is-active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+.note-palette button:active, .arrow-palette button:active { transform: scale(0.9); }
+.note-palette button.is-active, .arrow-palette button.is-active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
 @keyframes palette-in { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .note-in, .toolbar-tip, .tool-hint, .note-palette { animation: none; }
+  .note-in, .toolbar-tip, .tool-hint, .note-palette, .arrow-palette { animation: none; }
   .knob { transition: none; }
 }
 

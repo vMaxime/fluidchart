@@ -3,8 +3,10 @@ import { db } from './db'
 import * as repo from './repo'
 
 beforeEach(async () => {
-  await db.delete(); await db.open()
-  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(1000)
+  await db.delete()
+  await db.open()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(1000)
 })
 afterEach(() => vi.useRealTimers())
 
@@ -31,8 +33,10 @@ it('note edits bump lastEditedAt but never Board.updatedAt', async () => {
 
 it('listBoards sorts by lastEditedAt desc and hides deleted boards', async () => {
   const a = await repo.createBoard('A')
-  vi.setSystemTime(2000); const b = await repo.createBoard('B')
-  vi.setSystemTime(3000); await repo.addNote(a.id, { x: 0, y: 0 }, 'yellow')
+  vi.setSystemTime(2000)
+  const b = await repo.createBoard('B')
+  vi.setSystemTime(3000)
+  await repo.addNote(a.id, { x: 0, y: 0 }, 'yellow')
   expect((await repo.listBoards()).map((x) => x.name)).toEqual(['A', 'B'])
   await repo.deleteBoard(b.id)
   expect((await repo.listBoards()).map((x) => x.name)).toEqual(['A'])
@@ -87,7 +91,8 @@ it('renameBoard with an unchanged name writes nothing', async () => {
 
 it('listBoards counts live notes and lists their colours, most used first (max 3)', async () => {
   const b = await repo.createBoard('A')
-  for (const c of ['pink', 'blue', 'pink', 'green', 'yellow', 'pink', 'blue'] as const) await repo.addNote(b.id, { x: 0, y: 0 }, c)
+  for (const c of ['pink', 'blue', 'pink', 'green', 'yellow', 'pink', 'blue'] as const)
+    await repo.addNote(b.id, { x: 0, y: 0 }, c)
   const gone = await repo.addNote(b.id, { x: 0, y: 0 }, 'purple')
   await repo.deleteNotes([gone.id])
   const [s] = await repo.listBoards()
@@ -101,9 +106,12 @@ it('restoreBoard brings back the board with what was deleted with it, not earlie
   const other = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
   const earlier = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
   await repo.addArrow(b.id, kept.id, other.id)
-  vi.setSystemTime(2000); await repo.deleteNotes([earlier.id])
-  vi.setSystemTime(3000); await repo.deleteBoard(b.id)
-  vi.setSystemTime(4000); await repo.restoreBoard(b.id)
+  vi.setSystemTime(2000)
+  await repo.deleteNotes([earlier.id])
+  vi.setSystemTime(3000)
+  await repo.deleteBoard(b.id)
+  vi.setSystemTime(4000)
+  await repo.restoreBoard(b.id)
   expect((await repo.listBoards()).map((x) => x.name)).toEqual(['A'])
   expect((await repo.listNotes(b.id)).map((n) => n.id).sort()).toEqual([kept.id, other.id].sort())
   expect(await repo.listArrows(b.id)).toHaveLength(1)
@@ -142,4 +150,15 @@ it('usedTextColors reads every board but only notes with that background, skips 
   await repo.updateNote(gone.id, { html: '<p><span style="color: #9333ea">w</span></p>' })
   await repo.deleteNotes([gone.id])
   expect((await repo.usedTextColors('pink')).sort()).toEqual(['#2563eb', '#dc2626'])
+})
+
+it('updateArrow sets the colour, marked dirty with a newer updatedAt', async () => {
+  const b = await repo.createBoard('A')
+  const n1 = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  const n2 = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  const a = (await repo.addArrow(b.id, n1.id, n2.id))!
+  await db.arrows.update(a.id, { dirty: 0 })
+  await repo.updateArrow(a.id, { color: 'red' })
+  expect(await db.arrows.get(a.id)).toMatchObject({ color: 'red', dirty: 1 })
+  expect((await db.arrows.get(a.id))!.updatedAt).toBeGreaterThan(a.updatedAt)
 })
