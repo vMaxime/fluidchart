@@ -44,7 +44,9 @@ npm -w web run e2e     # Chromium et WebKit, contre le vrai serveur (base jetabl
 
 ## Mettre en production
 
-Le dépôt fournit une image Docker (`Dockerfile`, `docker-compose.yml`), à placer derrière un reverse proxy HTTPS (exemple Caddy dans `deploy/`). La configuration passe par des variables d'environnement : partez de `.env.example`.
+Le dépôt fournit une image Docker (`Dockerfile`, `docker-compose.yml`), à placer derrière un reverse proxy HTTPS. Deux exemples sont dans `deploy/` : Caddy, et nginx pour un nginx déjà en place. La configuration passe par des variables d'environnement : partez de `.env.example`.
+
+Derrière un reverse proxy, mettez `TRUST_PROXY=1` et ne publiez pas le port de l'app. Le proxy doit **remplacer** l'en-tête `X-Forwarded-For` et non le compléter : le délai entre deux essais de code se calcule sur cette IP.
 
 ## Secrets
 

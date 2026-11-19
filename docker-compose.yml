@@ -3,7 +3,9 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    # Only reachable from the VPS itself: Caddy (HTTPS) is the public entry point.
+    # Only reachable from the VPS itself: the HTTPS reverse proxy is the public entry point.
+    # If your proxy runs in the same Compose project (see deploy/nginx.conf.example), drop `ports`
+    # entirely and proxy to fluidchart:8787 instead.
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
