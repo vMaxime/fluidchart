@@ -10,3 +10,23 @@ server/dist
 server/data
 web/e2e/.auth/
 !.env.example
+
+# Secrets: never commit (see .githooks/pre-commit)
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+secrets/
+*.db
+*.db-wal
+*.db-shm
+
+# Kept on disk, never published
+.agents/
+skills-lock.json
+docs/superpowers/
+DEPLOY.local.md
+.claude/

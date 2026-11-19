@@ -1,0 +1,23 @@
+#!/bin/sh
+# Refuses commits that would publish secrets: real .env files, private keys, obvious tokens.
+# Installed by `npm install` (git config core.hooksPath .githooks).
+
+fail() {
+  echo "Commit refusé : $1" >&2
+  echo "(Si c'est une fausse alerte, vérifiez puis utilisez git commit --no-verify.)" >&2
+  exit 1
+}
+
+for f in $(git diff --cached --name-only --diff-filter=ACMR); do
+  case "$f" in
+    .env.example) ;;
+    .env | .env.* | */.env | */.env.*) fail "$f est un fichier d'environnement (secrets)." ;;
+    *.pem | *.key | *.p12 | *.pfx | *id_rsa* | *id_ed25519* | *id_ecdsa*) fail "$f ressemble à une clé privée." ;;
+  esac
+done
+
+# (This file is excluded: it contains the patterns themselves.)
+if git diff --cached -U0 --diff-filter=ACMR -- . ':(exclude).githooks/pre-commit' | grep -E '^\+' | grep -qE \
+  'BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|API_TOKEN=[^[:space:]"'"'"'<]'; then
+  fail "une ligne ajoutée ressemble à une clé privée ou à un jeton."
+fi
