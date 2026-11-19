@@ -5,8 +5,8 @@ import * as repo from '../db/repo'
 import { syncOnce } from './syncEngine'
 import { getSyncState } from './syncStatus'
 
-const ok = (body: SyncResponse) =>
-  new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+const ok = (body: Omit<SyncResponse, 'serverId'> & { serverId?: string }) =>
+  new Response(JSON.stringify({ serverId: 'S1', ...body }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
 beforeEach(async () => {
   await db.delete()
@@ -90,5 +90,54 @@ it('background sync turns an unexpected failure into the error state (no unhandl
   setSyncState('synced')
   const stop = startSync(async () => new Response('not json', { status: 200 }))
   await vi.waitFor(() => expect(getSyncState()).toBe('error'))
+  stop()
+})
+
+it('a pushed row the server refused takes the server version instead of passing as sent', async () => {
+  const b = await repo.createBoard('Cardio')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await syncOnce(async (body) => ok({ cursor: 2, changes: body.changes }))
+  vi.setSystemTime(7000)
+  await repo.updateNote(n.id, { html: '<p>Mac</p>' })
+  const local = (await db.notes.get(n.id))!
+  const serverWinner: EntityChange = { kind: 'note', row: { ...(local as Note), html: '<p>autre appareil</p>' } } // same updatedAt, other content
+  await syncOnce(async () => ok({ cursor: 3, changes: [serverWinner] }))
+  expect(await db.notes.get(n.id)).toMatchObject({ html: '<p>autre appareil</p>', dirty: 0 })
+})
+
+it('a new server id resends everything from scratch', async () => {
+  const b = await repo.createBoard('Cardio')
+  await syncOnce(async (body) => ok({ cursor: 7, changes: body.changes, serverId: 'OLD' }))
+  expect((await db.boards.get(b.id))!.dirty).toBe(0)
+  const sent: SyncRequest[] = []
+  const outcome = await syncOnce(async (body) => {
+    sent.push(body)
+    return ok({ cursor: sent.length, changes: [], serverId: 'NEW' })
+  })
+  expect(outcome).toBe('ok')
+  expect(sent.map((r) => r.cursor)).toEqual([7, 0])
+  expect(sent[1].changes.map((c) => c.row.id)).toEqual([b.id])
+  expect((await db.boards.get(b.id))!.dirty).toBe(0)
+})
+
+it('an edit during an in-flight background sync triggers another sync within about a second', async () => {
+  vi.useRealTimers()
+  const { startSync } = await import('./syncEngine')
+  const b = await repo.createBoard('Cardio')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  let calls = 0
+  let release!: () => void
+  const stop = startSync(async (body) => {
+    calls++
+    if (calls === 1) {
+      await repo.updateNote(n.id, { html: '<p>pendant</p>' }) // the row is already dirty: the hook must still notice
+      await new Promise<void>((r) => (release = r))
+    }
+    return ok({ cursor: calls, changes: body.changes })
+  })
+  await vi.waitFor(() => expect(calls).toBe(1))
+  release()
+  await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(2), { timeout: 2500 })
+  await vi.waitFor(async () => expect((await db.notes.get(n.id))!.dirty).toBe(0))
   stop()
 })

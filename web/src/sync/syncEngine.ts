@@ -45,8 +45,9 @@ const hasDirty = async () =>
  * a pushed row is marked clean only if it still has the updatedAt we sent (compare-and-clear),
  * so an edit made while the request was in flight is sent next time.
  */
-export async function syncOnce(post: Post = defaultPost): Promise<SyncOutcome> {
-  const cursor = (await db.meta.get('cursor'))?.value ?? 0
+export async function syncOnce(post: Post = defaultPost, retry = true): Promise<SyncOutcome> {
+  const cursor = Number((await db.meta.get('cursor'))?.value ?? 0)
+  const knownServer = (await db.meta.get('serverId'))?.value
   const changes = await dirtyChanges()
   let res: Response
   try {
@@ -64,11 +65,27 @@ export async function syncOnce(post: Post = defaultPost): Promise<SyncOutcome> {
     return 'error'
   }
   const body = (await res.json()) as SyncResponse
+  if (knownServer !== undefined && knownServer !== body.serverId && retry) {
+    // New server database (lost volume, reset): it knows nothing we sent before. Send everything again.
+    await db.transaction('rw', db.boards, db.notes, db.arrows, db.meta, async () => {
+      await db.boards.toCollection().modify({ dirty: 1 })
+      await db.notes.toCollection().modify({ dirty: 1 })
+      await db.arrows.toCollection().modify({ dirty: 1 })
+      await db.meta.put({ key: 'cursor', value: 0 })
+      await db.meta.put({ key: 'serverId', value: body.serverId })
+    })
+    return syncOnce(post, false)
+  }
+  const sentAt = new Map(changes.map((c) => [`${c.kind}:${c.row.id}`, c.row.updatedAt]))
   await db.transaction('rw', db.boards, db.notes, db.arrows, db.meta, async () => {
     for (const c of body.changes) {
       const table = tableOf(c.kind)
       const local = await table.get(c.row.id)
-      if (!local || c.row.updatedAt > local.updatedAt) await table.put({ ...(c.row as Note), dirty: 0 })
+      const sent = sentAt.get(`${c.kind}:${c.row.id}`)
+      // Newer wins; and for a row we just pushed and haven't touched since, the server's version is
+      // the truth (it may have refused ours as older or equal).
+      const serverHasOurs = sent !== undefined && local?.updatedAt === sent && c.row.updatedAt >= sent
+      if (!local || c.row.updatedAt > local.updatedAt || serverHasOurs) await table.put({ ...(c.row as Note), dirty: 0 })
     }
     for (const c of changes) {
       const table = tableOf(c.kind)
@@ -76,6 +93,7 @@ export async function syncOnce(post: Post = defaultPost): Promise<SyncOutcome> {
       if (local?.dirty && local.updatedAt === c.row.updatedAt) await table.update(c.row.id, { dirty: 0 })
     }
     await db.meta.put({ key: 'cursor', value: body.cursor })
+    await db.meta.put({ key: 'serverId', value: body.serverId })
   })
   setSyncState((await hasDirty()) ? 'pending' : 'synced')
   return 'ok'
@@ -124,8 +142,9 @@ export function startSync(post: Post = defaultPost): () => void {
   const onCreating = (_key: unknown, obj: { dirty?: number }) => {
     if (obj.dirty === 1) soon()
   }
-  const onUpdating = (mods: { dirty?: number }) => {
-    if (mods.dirty === 1) soon()
+  // Dexie passes only the changed fields: a row that was already dirty has no `dirty` in mods.
+  const onUpdating = (mods: { dirty?: number }, _key: unknown, obj: { dirty?: number }) => {
+    if ((mods.dirty ?? obj.dirty) === 1) soon()
   }
   const onVisible = () => document.visibilityState === 'visible' && void run()
   const onOnline = () => void run()

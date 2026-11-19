@@ -90,3 +90,26 @@ it('a 401 during sync brings the PIN screen back; local edits survive and are pu
   const pushed = calls.filter((c) => c.url === '/api/sync').at(-1)!.body as { changes: { row: { id: string } }[] }
   expect(pushed.changes.map((c) => c.row.id)).toContain(board.id)
 })
+
+it('a remembered device opens at once, even when the server hangs', async () => {
+  localStorage.setItem('chart.unlocked', '1')
+  handler = () => new Promise<Response>(() => {})
+  app()
+  expect(screen.getByText('Mes cartes')).toBeInTheDocument()
+})
+
+it('a remembered device opens on its local data when the server answers 502', async () => {
+  localStorage.setItem('chart.unlocked', '1')
+  handler = () => reply(502)
+  app()
+  expect(await screen.findByText('Mes cartes')).toBeInTheDocument()
+  await new Promise((r) => setTimeout(r, 50))
+  expect(screen.queryByRole('heading', { name: 'Entrez votre code' })).toBeNull()
+})
+
+it('a remembered device whose session expired is asked for the PIN', async () => {
+  localStorage.setItem('chart.unlocked', '1')
+  handler = (url) => (url === '/api/session' ? reply(401) : reply(401))
+  app()
+  expect(await screen.findByRole('heading', { name: 'Entrez votre code' })).toBeInTheDocument()
+})

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 
 /** Opens (and if needed creates) the server database. ':memory:' works for tests. */
@@ -18,10 +19,18 @@ export function openDb(file: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS entities_seq ON entities (seq);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
     INSERT OR IGNORE INTO meta (key, value) VALUES ('seq', 0);
-    CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, pin_hash TEXT);
+    CREATE TABLE IF NOT EXISTS identity (server_id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS login_failures (at INTEGER NOT NULL);
   `)
+  if (!db.prepare('SELECT 1 FROM identity').get()) resetServerId(db)
   return db
+}
+
+/** A new random identity: clients that knew another one send everything again. */
+export function resetServerId(db: DatabaseSync): void {
+  db.exec('DELETE FROM identity')
+  db.prepare('INSERT INTO identity (server_id) VALUES (?)').run(randomBytes(12).toString('base64url'))
 }
 
 /** Runs `fn` inside an immediate transaction. */

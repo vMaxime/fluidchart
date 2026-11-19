@@ -2,7 +2,7 @@ import { beforeEach, it, expect } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
 import { newBoard, newNote, type EntityChange, type Note } from '@chart/shared'
 import { openDb } from './db'
-import { applyChanges, changesSince } from './store'
+import { applyChanges, changesSince, serverId } from './store'
 
 let db: DatabaseSync
 beforeEach(() => {
@@ -40,4 +40,18 @@ it('tombstones travel like any change', () => {
   const dead: EntityChange = { kind: 'note', row: { ...(note('<p>A</p>', 5).row as Note), deleted: true } }
   applyChanges(db, [dead])
   expect(changesSince(db, 1).changes).toEqual([dead])
+})
+
+it('applyChanges returns the stored winner for each rejected change', () => {
+  applyChanges(db, [note('<p>serveur</p>', 5)])
+  const rejected = applyChanges(db, [note('<p>ancien</p>', 3), note('<p>égal</p>', 5)])
+  expect(rejected.map((c) => (c.row as Note).html)).toEqual(['<p>serveur</p>', '<p>serveur</p>'])
+  expect(applyChanges(db, [note('<p>récent</p>', 9)])).toEqual([])
+})
+
+it('the server id is stable, and a fresh database gets a different one', () => {
+  const id = serverId(db)
+  expect(id).toMatch(/^[\w-]{16,}$/)
+  expect(serverId(db)).toBe(id)
+  expect(serverId(openDb(':memory:'))).not.toBe(id)
 })

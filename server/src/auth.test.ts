@@ -72,3 +72,9 @@ it('samePin compares without throwing on different lengths', () => {
   expect(samePin('2468', '24680')).toBe(false)
   expect(samePin('2468', '')).toBe(false)
 })
+
+it('changing APP_PIN revokes every session made under the old one', () => {
+  const { token } = createAuth(db, { pin: '2468', now }).attempt('1.1.1.1', '2468')
+  expect(createAuth(db, { pin: '2468', now }).checkSession(token)).toBe(true)
+  expect(createAuth(db, { pin: '1357', now }).checkSession(token)).toBe(false)
+})

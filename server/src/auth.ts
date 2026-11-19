@@ -25,8 +25,10 @@ export function createAuth(db: DatabaseSync, opts: { pin: string; now?: () => nu
   const purge = db.prepare('DELETE FROM login_failures WHERE at <= ?')
   const recentFailures = db.prepare('SELECT COUNT(*) AS n, MIN(at) AS oldest FROM login_failures WHERE at > ?')
   const recordFailure = db.prepare('INSERT INTO login_failures (at) VALUES (?)')
-  const insertSession = db.prepare('INSERT INTO sessions (token_hash, expires_at) VALUES (?, ?)')
-  const findSession = db.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?')
+  // Sessions remember which PIN opened them: changing APP_PIN signs every device out.
+  const pinHash = sha256(`pin:${opts.pin}`).toString('hex')
+  const insertSession = db.prepare('INSERT INTO sessions (token_hash, expires_at, pin_hash) VALUES (?, ?, ?)')
+  const findSession = db.prepare('SELECT expires_at, pin_hash FROM sessions WHERE token_hash = ?')
   const purgeSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?')
 
   function attempt(ip: string, pin: string): { result: PinResult; token?: string } {
@@ -47,14 +49,14 @@ export function createAuth(db: DatabaseSync, opts: { pin: string; now?: () => nu
     }
     purgeSessions.run(t)
     const token = randomBytes(32).toString('base64url')
-    insertSession.run(sha256(token).toString('hex'), t + SESSION_MS)
+    insertSession.run(sha256(token).toString('hex'), t + SESSION_MS, pinHash)
     return { result: { ok: true }, token }
   }
 
   function checkSession(token: string | undefined): boolean {
     if (!token) return false
-    const row = findSession.get(sha256(token).toString('hex')) as { expires_at: number } | undefined
-    return !!row && row.expires_at > now()
+    const row = findSession.get(sha256(token).toString('hex')) as { expires_at: number; pin_hash: string | null } | undefined
+    return !!row && row.expires_at > now() && row.pin_hash === pinHash
   }
 
   return { attempt, checkSession }

@@ -21,20 +21,23 @@ const remember = () => {
 }
 
 /**
- * Shows the app once the device holds a valid session, or offline if it was unlocked before
- * (local data stays usable without network). Otherwise, or when the session expires during a sync,
+ * Shows the app once the device holds a valid session; a device unlocked before opens immediately
+ * on its local data (no network, server down or slow), and only a 401 brings the PIN back. Otherwise, or when the session expires during a sync,
  * shows the PIN screen; nothing local is touched, and syncing resumes after unlocking.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [gate, setGate] = useState<'checking' | 'open' | 'pin'>('checking')
+  // A device unlocked before opens at once on its local data; the session check runs behind it.
+  const [gate, setGate] = useState<'checking' | 'open' | 'pin'>(() => (remembered() ? 'open' : 'checking'))
   const syncState = useSyncState()
 
   useEffect(() => {
     let live = true
     void hasSession().then((session) => {
       if (!live) return
-      if (session === true) remember()
-      setGate(session === true || (session === 'offline' && remembered()) ? 'open' : 'pin')
+      if (session === true) {
+        remember()
+        setGate('open')
+      } else if (session === false || !remembered()) setGate('pin')
     })
     return () => {
       live = false

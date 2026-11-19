@@ -3,7 +3,12 @@ import type { Arrow, Board, Note } from './model'
 export type EntityKind = 'board' | 'note' | 'arrow'
 export type EntityChange = { kind: 'board'; row: Board } | { kind: 'note'; row: Note } | { kind: 'arrow'; row: Arrow }
 export type SyncRequest = { cursor: number; changes: EntityChange[] }
-export type SyncResponse = { cursor: number; changes: EntityChange[] }
+/**
+ * `serverId` changes when the server database is new (lost volume, reset): the client then sends
+ * everything again from scratch. `changes` also carries the stored winner of any pushed row the
+ * server refused (older or equal updatedAt), so the device converges instead of believing it won.
+ */
+export type SyncResponse = { cursor: number; changes: EntityChange[]; serverId: string }
 
 const KINDS = new Set<string>(['board', 'note', 'arrow'])
 

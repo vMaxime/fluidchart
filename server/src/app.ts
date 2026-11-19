@@ -9,7 +9,8 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { isEntityChange, type SyncRequest } from '@chart/shared'
 import type { createAuth } from './auth'
 import type { Config } from './config'
-import { applyChanges, changesSince } from './store'
+import { resetServerId } from './db'
+import { applyChanges, changesSince, serverId } from './store'
 
 const COOKIE = 'chart_session'
 const YEAR_S = 365 * 24 * 3600
@@ -53,13 +54,17 @@ export function createApp({ db, auth, config }: { db: DatabaseSync; auth: Return
     const body = (await c.req.json().catch(() => null)) as Partial<SyncRequest> | null
     if (typeof body?.cursor !== 'number' || !Array.isArray(body.changes) || !body.changes.every(isEntityChange))
       return c.json({ error: 'invalid sync request' }, 400)
-    applyChanges(db, body.changes)
-    return c.json(changesSince(db, body.cursor))
+    const rejected = applyChanges(db, body.changes)
+    const since = changesSince(db, body.cursor)
+    const seen = new Set(since.changes.map((ch) => `${ch.kind}:${ch.row.id}`))
+    const winners = rejected.filter((ch) => !seen.has(`${ch.kind}:${ch.row.id}`))
+    return c.json({ cursor: since.cursor, changes: [...since.changes, ...winners], serverId: serverId(db) })
   })
 
   if (config.e2eReset)
     app.post('/api/test/reset', (c) => {
       db.exec("DELETE FROM entities; DELETE FROM login_failures; UPDATE meta SET value = 0 WHERE key = 'seq';")
+      resetServerId(db)
       return c.body(null, 204)
     })
 

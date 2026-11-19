@@ -1,6 +1,6 @@
 import { beforeEach, it, expect } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
-import { newNote, type EntityChange, type SyncResponse } from '@chart/shared'
+import { newNote, type EntityChange, type Note, type SyncResponse } from '@chart/shared'
 import { openDb } from './db'
 import { createAuth } from './auth'
 import { createApp } from './app'
@@ -50,7 +50,7 @@ it('sync round-trip: pushed changes come back through the cursor', async () => {
   const first = (await (await app.request('/api/sync', json({ cursor: 0, changes: [change] }, { Cookie: cookie }))).json()) as SyncResponse
   expect(first.changes).toEqual([change])
   const again = (await (await app.request('/api/sync', json({ cursor: first.cursor, changes: [] }, { Cookie: cookie }))).json()) as SyncResponse
-  expect(again).toEqual({ cursor: first.cursor, changes: [] })
+  expect(again).toEqual({ cursor: first.cursor, changes: [], serverId: first.serverId })
 })
 
 it('non-JSON POST is refused with 415', async () => {
@@ -78,4 +78,25 @@ it('X-Forwarded-For is ignored unless TRUST_PROXY=1', async () => {
   const trusting = make({ TRUST_PROXY: '1' })
   await trusting.request('/api/login', json({ pin: '0000' }, { 'X-Forwarded-For': '1.1.1.1' }))
   expect(await (await trusting.request('/api/login', json({ pin: '2468' }, { 'X-Forwarded-For': '2.2.2.2' }))).json()).toEqual({ ok: true })
+})
+
+it('sync answers with the server id and the winning rows of rejected changes', async () => {
+  const app = make()
+  const cookie = await loginCookie(app)
+  const newer: EntityChange = { kind: 'note', row: { ...newNote('b1', { x: 0, y: 0 }, 'pink', 9), id: 'n1', html: '<p>serveur</p>' } }
+  const first = (await (await app.request('/api/sync', json({ cursor: 0, changes: [newer] }, { Cookie: cookie }))).json()) as SyncResponse
+  expect(first.serverId).toMatch(/^[\w-]{16,}$/)
+  const stale: EntityChange = { kind: 'note', row: { ...(newer.row as Note), html: '<p>en retard</p>', updatedAt: 4 } }
+  const res = (await (await app.request('/api/sync', json({ cursor: first.cursor, changes: [stale] }, { Cookie: cookie }))).json()) as SyncResponse
+  expect(res.changes).toEqual([newer])
+  expect(res.serverId).toBe(first.serverId)
+})
+
+it('the e2e reset gives the server a new id', async () => {
+  const app = make({ E2E_RESET: '1' })
+  const cookie = await loginCookie(app)
+  const before = ((await (await app.request('/api/sync', json({ cursor: 0, changes: [] }, { Cookie: cookie }))).json()) as SyncResponse).serverId
+  await app.request('/api/test/reset', json({}))
+  const after = ((await (await app.request('/api/sync', json({ cursor: 0, changes: [] }, { Cookie: cookie }))).json()) as SyncResponse).serverId
+  expect(after).not.toBe(before)
 })

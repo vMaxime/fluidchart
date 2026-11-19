@@ -15,10 +15,16 @@ export async function login(pin: string): Promise<PinResult> {
   return (await res.json()) as PinResult
 }
 
-/** true / false for a valid session, 'offline' when the server cannot be reached. */
-export async function hasSession(): Promise<boolean | 'offline'> {
+/**
+ * true / false for a valid session (204 / 401); 'offline' when the server can't answer: network
+ * down, server error (502 while the container restarts…) or no answer within `timeoutMs`.
+ */
+export async function hasSession(timeoutMs = 4000): Promise<boolean | 'offline'> {
   try {
-    return (await fetch('/api/session', { credentials: 'same-origin' })).status === 204
+    const res = await fetch('/api/session', { credentials: 'same-origin', signal: AbortSignal.timeout(timeoutMs) })
+    if (res.status === 204) return true
+    if (res.status === 401) return false
+    return 'offline'
   } catch {
     return 'offline'
   }

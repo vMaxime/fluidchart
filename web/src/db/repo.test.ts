@@ -109,3 +109,22 @@ it('restoreBoard brings back the board with what was deleted with it, not earlie
   expect(await repo.listArrows(b.id)).toHaveLength(1)
   expect(await db.boards.get(b.id)).toMatchObject({ deleted: false, dirty: 1, updatedAt: 4000 })
 })
+
+it('a write never moves updatedAt backwards (device clock behind a pulled version)', async () => {
+  const b = await repo.createBoard('A')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await db.notes.update(n.id, { updatedAt: 10_000, dirty: 0 }) // as if pulled from a device whose clock runs ahead
+  vi.setSystemTime(5000)
+  await repo.updateNote(n.id, { html: '<p>Mac</p>' })
+  expect(await db.notes.get(n.id)).toMatchObject({ html: '<p>Mac</p>', updatedAt: 10_001, dirty: 1 })
+})
+
+it('deleting a board with rows from the future still restores them together', async () => {
+  const b = await repo.createBoard('A')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await db.notes.update(n.id, { updatedAt: 50_000 })
+  vi.setSystemTime(3000)
+  await repo.deleteBoard(b.id)
+  await repo.restoreBoard(b.id)
+  expect(await repo.listNotes(b.id)).toHaveLength(1)
+})

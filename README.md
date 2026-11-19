@@ -48,10 +48,10 @@ Pré-requis sur le VPS : Docker (avec Compose) et [Caddy](https://caddyserver.co
 
 **Mettre à jour :** `git pull && docker compose up -d --build`.
 
-**Changer le code :** modifier `APP_PIN` dans `.env`, puis `docker compose up -d`. Les appareils déjà connectés le restent.
+**Changer le code :** modifier `APP_PIN` dans `.env`, puis `docker compose up -d`. Cela **déconnecte tous les appareils**, qui redemandent le nouveau code. Leurs fiches restent sur l'appareil et repartent au serveur après le déverrouillage. C'est aussi la marche à suivre si le code a fuité.
 
 ### Sécurité du code
 
 - Le serveur impose 3 secondes entre deux essais depuis la même adresse. L'app affiche le même délai.
 - Au-delà de 30 codes faux en 24 heures, toutes adresses confondues, plus aucun nouvel appareil ne peut se connecter jusqu'à ce que la fenêtre se libère d'elle-même. Les appareils déjà connectés ne sont pas touchés.
-- La session dure un an par appareil (cookie `HttpOnly`, `Secure`, `SameSite=Lax`).
+- La session dure un an par appareil (cookie `HttpOnly`, `Secure`, `SameSite=Lax`). Changer le code les révoque toutes.
