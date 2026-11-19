@@ -1,37 +1,55 @@
 import type { Id } from '@chart/shared'
-import { db, type Local } from '../db/db'
-import { applySnapshots, type AnyRow, type TableName } from '../db/repo'
+import { db } from '../db/db'
+import { applyFieldChanges, type FieldChange, type Fields, type TableName } from '../db/repo'
 
-/** One row in an action: the version before (null = it didn't exist) and after. */
-export type Snapshot = { table: TableName; id: Id; before: AnyRow | null; after: AnyRow }
+/**
+ * One row in an action, as the fields the action changed: `before` → `after`.
+ * `before: null` means the action created the row (undo hides it, redo shows it again).
+ */
+export type Snapshot = { table: TableName; id: Id; before: Fields | null; after: Fields }
 
-function strip(row: Local<AnyRow>): AnyRow {
-  const { dirty: _dirty, ...rest } = row
-  return rest as AnyRow
+const IGNORED = new Set(['updatedAt', 'dirty', 'id'])
+
+/** Turns the full rows captured during an action into the fields it actually changed. */
+function toSnapshot(table: TableName, id: Id, before: Fields | null, after: Fields): Snapshot | null {
+  if (before === null) return { table, id, before: null, after: { deleted: false } }
+  const keys = Object.keys(after).filter((k) => !IGNORED.has(k) && before[k] !== after[k])
+  if (!keys.length) return null
+  const pick = (row: Fields) => Object.fromEntries(keys.map((k) => [k, row[k]]))
+  return { table, id, before: pick(before), after: pick(after) }
 }
 
 // Dexie hooks are per database: one recorder at a time collects the user's writes (dirty = 1)
 // made while an action runs. Sync writes (dirty = 0) are never recorded.
-let recorder: Map<string, Snapshot> | null = null
+type Capture = { table: TableName; id: Id; before: Fields | null; after: Fields }
+let recorder: Map<string, Capture> | null = null
 const TABLES: TableName[] = ['boards', 'notes', 'arrows']
 for (const name of TABLES) {
   const table = db[name] as unknown as typeof db.notes
   table.hook('creating', (_key, obj) => {
     if (!recorder || obj.dirty !== 1) return
     const k = `${name}:${obj.id}`
-    const prev = recorder.get(k)
-    recorder.set(k, { table: name, id: obj.id, before: prev ? prev.before : null, after: strip(obj) })
+    recorder.set(k, { table: name, id: obj.id, before: recorder.get(k)?.before ?? null, after: { ...obj } })
   })
   table.hook('updating', (mods, _key, obj) => {
     const merged = { ...obj, ...(mods as Partial<typeof obj>) }
     if (!recorder || merged.dirty !== 1) return
     const k = `${name}:${obj.id}`
     const prev = recorder.get(k)
-    recorder.set(k, { table: name, id: obj.id, before: prev ? prev.before : strip(obj), after: strip(merged) })
+    recorder.set(k, { table: name, id: obj.id, before: prev ? prev.before : { ...obj }, after: { ...merged } })
   })
 }
 
-/** Undo / redo for one board, in memory. */
+const undoChange = (s: Snapshot): FieldChange =>
+  s.before === null
+    ? { table: s.table, id: s.id, from: { deleted: false }, to: { deleted: true } }
+    : { table: s.table, id: s.id, from: s.after, to: s.before }
+const redoChange = (s: Snapshot): FieldChange =>
+  s.before === null
+    ? { table: s.table, id: s.id, from: { deleted: true }, to: { deleted: false } }
+    : { table: s.table, id: s.id, from: s.before, to: s.after }
+
+/** Undo / redo for one board, in memory. Undo only touches the fields an action changed. */
 export function createHistory(limit = 100) {
   const past: Snapshot[][] = []
   const future: Snapshot[][] = []
@@ -59,27 +77,40 @@ export function createHistory(limit = 100) {
       return await fn()
     } finally {
       if (recorder === mine) recorder = null
-      push([...mine.values()])
+      push([...mine.values()].flatMap((c) => toSnapshot(c.table, c.id, c.before, c.after) ?? []))
     }
   }
 
-  async function undo(): Promise<boolean> {
-    const action = past.pop()
-    if (!action) return false
-    await applySnapshots(action.map((s) => ({ table: s.table, id: s.id, row: s.before })))
-    future.push(action)
-    changed()
-    return true
+  // Undo / redo run one after another (⌘Z pressed twice quickly must undo two steps), and a step
+  // leaves its stack only once its writes succeeded.
+  let queue: Promise<unknown> = Promise.resolve()
+  const serial = (op: () => Promise<boolean>): Promise<boolean> => {
+    const next = queue.then(op, op)
+    queue = next.catch(() => undefined)
+    return next
   }
 
-  async function redo(): Promise<boolean> {
-    const action = future.pop()
-    if (!action) return false
-    await applySnapshots(action.map((s) => ({ table: s.table, id: s.id, row: s.after })))
-    past.push(action)
-    changed()
-    return true
-  }
+  const undo = () =>
+    serial(async () => {
+      const action = past.at(-1)
+      if (!action) return false
+      await applyFieldChanges(action.map(undoChange))
+      past.pop()
+      future.push(action)
+      changed()
+      return true
+    })
+
+  const redo = () =>
+    serial(async () => {
+      const action = future.at(-1)
+      if (!action) return false
+      await applyFieldChanges(action.map(redoChange))
+      future.pop()
+      past.push(action)
+      changed()
+      return true
+    })
 
   return {
     record,

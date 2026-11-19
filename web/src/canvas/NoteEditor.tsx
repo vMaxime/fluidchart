@@ -61,8 +61,10 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
       debouncer.call(next)
     },
     // Focus moving into the format bar (or the note's colour palette) is not leaving the note.
+    // The window losing focus (macOS colour panel, switching apps) is not leaving the note either.
     onBlur: ({ event }) => {
-      if (!stillEditing((event as FocusEvent).relatedTarget)) finish()
+      if (!document.hasFocus() || stillEditing((event as FocusEvent).relatedTarget)) return
+      finish()
     },
   })
 
@@ -92,7 +94,16 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
   }, [editor])
 
   useFlushOnHide(debouncer.flush)
-  useEffect(() => () => debouncer.flush(), [debouncer])
+  // However the editor goes away, report the final text once (one undo step per writing session).
+  useEffect(
+    () => () => {
+      debouncer.flush()
+      if (finished.current) return
+      finished.current = true
+      callbacks.current.onDone(lastHtml.current)
+    },
+    [debouncer],
+  )
 
   return (
     <div className="note-editor nodrag nopan nowheel">
@@ -104,7 +115,10 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
           appendTo={() => document.body}
           options={{ placement: 'bottom', offset: 10, strategy: 'fixed' }}
           onBlur={(e) => {
-            if (!stillEditing(e.relatedTarget) && !editor.view.dom.contains(e.relatedTarget as Node | null)) finish()
+            // TipTap wraps the event: read the native one (its relatedTarget getter throws on the wrapper).
+            const next = (e.nativeEvent as FocusEvent).relatedTarget
+            if (!document.hasFocus() || stillEditing(next) || editor.view.dom.contains(next as Node | null)) return
+            finish()
           }}
         >
           <FormatControls editor={editor} noteColor={noteColor} />

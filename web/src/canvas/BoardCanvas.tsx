@@ -16,7 +16,6 @@ import '@xyflow/react/dist/style.css'
 import { DEFAULT_NOTE_WIDTH, type Id, type NoteColor } from '@chart/shared'
 import { addArrow, addNote, deleteArrows, deleteNotes, listArrows, listNotes, updateNote } from '../db/repo'
 import { trackWrite } from '../db/saveErrors'
-import { db } from '../db/db'
 import { createHistory } from './history'
 import { ArrowPreview, useArrowDrag } from './arrowDrag'
 import { CanvasContext, type Tool } from './CanvasContext'
@@ -73,10 +72,16 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   const history = useMemo(() => createHistory(), [boardId])
   useSyncExternalStore(history.subscribe, history.version)
 
-  // A writing session (open → close) is one undo step: remember the text it started from.
-  const session = useRef<{ id: Id; html: string } | null>(null)
+  // A writing session (open → close) is one undo step: remember the text each note started from.
+  const sessions = useRef(new Map<Id, string>())
+  const editingRef = useRef<Id | null>(null)
+  useEffect(() => {
+    editingRef.current = editing?.id ?? null
+  }, [editing])
   const beginEditing = useCallback((id: Id, html: string, initialInput?: string) => {
-    session.current = { id, html }
+    if (editingRef.current === id) return // already writing in it (e.g. double-click on a word)
+    if (!sessions.current.has(id)) sessions.current.set(id, html)
+    editingRef.current = id
     setEditing({ id, initialInput })
   }, [])
   const startEditing = useCallback(
@@ -86,25 +91,18 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   )
   // Leaving a note also deselects it, so a stray Backspace right after Escape cannot delete it.
   const stopEditing = useCallback(
-    (finalHtml?: string) => {
-      const start = session.current
-      session.current = null
-      if (start && finalHtml !== undefined && finalHtml !== start.html)
-        void db.notes.get(start.id).then((row) => {
-          if (!row) return
-          const { dirty: _dirty, ...note } = row
-          history.push([
-            {
-              table: 'notes',
-              id: start.id,
-              before: { ...note, html: start.html },
-              after: { ...note, html: finalHtml },
-            },
-          ])
-        })
+    (finalHtml?: string, id?: Id) => {
+      if (finalHtml !== undefined && id !== undefined) {
+        const start = sessions.current.get(id)
+        sessions.current.delete(id)
+        // Pushed now (no await), so an Annuler clicked in the same instant undoes this step.
+        if (start !== undefined && start !== finalHtml)
+          history.push([{ table: 'notes', id, before: { html: start }, after: { html: finalHtml } }])
+      }
       setEditing((cur) => {
-        if (cur)
-          setNodes((nds) => nds && nds.map((n) => (n.id === cur.id && n.selected ? { ...n, selected: false } : n)))
+        if (!cur || (id !== undefined && cur.id !== id)) return cur // another note is being edited now
+        setNodes((nds) => nds && nds.map((n) => (n.id === cur.id && n.selected ? { ...n, selected: false } : n)))
+        editingRef.current = null
         return null
       })
     },
@@ -309,7 +307,9 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeDragStop={onNodeDragStop}
-            onNodeDoubleClick={(_e, node) => tool === 'select' && startEditing(node.id)}
+            onNodeDoubleClick={(_e, node) =>
+              tool === 'select' && editingRef.current !== node.id && startEditing(node.id)
+            }
             onPaneClick={(e) => {
               if (tool === 'note') {
                 createNoteAt(e.clientX, e.clientY)

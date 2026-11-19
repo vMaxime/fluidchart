@@ -85,3 +85,63 @@ test('picking a text colour keeps the note in edit mode', async ({ page }) => {
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('note').locator('span[style*="color"]')).toHaveCSS('color', 'rgb(220, 38, 38)')
 })
+
+test('undo then redo of a new note brings its text back, even after a reload', async ({ page }) => {
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('Escape')
+  const note = page.getByTestId('note')
+  await page.keyboard.press('ControlOrMeta+z') // the writing session
+  await expect(note).toHaveText('')
+  await page.keyboard.press('ControlOrMeta+z') // the creation
+  await expect(note).toHaveCount(0)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(note).toHaveText('Insuline')
+  await page.waitForTimeout(300)
+  await page.reload()
+  await expect(note).toHaveText('Insuline')
+})
+
+test('double-clicking a word while writing keeps one writing step', async ({ page }) => {
+  await page.keyboard.type('alpha beta')
+  await page.waitForTimeout(600)
+  // Double-click on the first word (the middle of the line is the space between the words).
+  await page.getByRole('textbox', { name: 'Texte du post-it' }).getByText('alpha beta').dblclick({ position: { x: 12, y: 8 } })
+  await page.locator('.format-menu').getByRole('button', { name: 'Gras' }).click()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(page.getByTestId('note')).toHaveText('')
+})
+
+test('"Autre couleur…" applies the picked colour and keeps editing', async ({ page }) => {
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('ControlOrMeta+A')
+  const bar = page.locator('.format-menu')
+  await bar.getByRole('button', { name: 'Couleur du texte' }).click()
+  await bar.getByLabel('Autre couleur').fill('#123456')
+  await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('note').locator('span[style*="color"]')).toHaveCSS('color', 'rgb(18, 52, 86)')
+})
+
+test('an instant click on Annuler while writing keeps the note', async ({ page }) => {
+  await page.keyboard.type('Insuline')
+  await page.getByRole('button', { name: 'Annuler' }).click({ delay: 0 })
+  await expect(page.getByTestId('note')).toHaveCount(1)
+})
+
+test('leaving the format bar for the canvas ends the edit cleanly and keeps it as one undo step', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.keyboard.type('Premier')
+  await page.keyboard.press('ControlOrMeta+A')
+  const bar = page.locator('.format-menu')
+  await bar.getByRole('button', { name: 'Couleur du texte' }).click()
+  await bar.getByLabel('Autre couleur').focus()
+  await page.locator('.react-flow__pane').click({ position: { x: 600, y: 400 } })
+  await expect(page.getByRole('textbox', { name: 'Texte du post-it' })).toHaveCount(0)
+  expect(errors).toEqual([])
+  await page.keyboard.press('ControlOrMeta+z') // undoes the writing session, not the creation
+  await expect(page.getByTestId('note')).toHaveCount(1)
+  await expect(page.getByTestId('note')).toHaveText('')
+})

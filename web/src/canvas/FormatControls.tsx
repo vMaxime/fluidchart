@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import type { NoteColor } from '@chart/shared'
 import { usedTextColors } from '../db/repo'
@@ -58,6 +58,7 @@ function Btn(props: {
 export function FormatControls({ editor, noteColor }: { editor: Editor; noteColor: NoteColor }) {
   const [open, setOpen] = useState<null | 'highlight' | 'color' | 'size'>(null)
   const [used, setUsed] = useState<string[]>([])
+  const customColor = useRef<HTMLInputElement>(null)
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -75,7 +76,21 @@ export function FormatControls({ editor, noteColor }: { editor: Editor; noteColo
     if (open === 'color') void usedTextColors(noteColor).then(setUsed)
   }, [open, noteColor])
 
-  const run = (fn: (c: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) => fn(editor.chain().focus()).run()
+  // "Autre couleur…": apply once the choice is committed (native `change`), not on every move in the picker.
+  useEffect(() => {
+    const input = customColor.current
+    if (!input) return
+    const onCommit = () => pickColor(input.value)
+    input.addEventListener('change', onCommit)
+    return () => input.removeEventListener('change', onCommit)
+  })
+
+  // Focus the editor synchronously first: TipTap's own focus() is deferred, and a control that
+  // unmounts while focused (the colour input) would otherwise drop focus and end the edit.
+  const run = (fn: (c: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) => {
+    editor.view.focus()
+    return fn(editor.chain().focus()).run()
+  }
   const toggle = (panel: 'highlight' | 'color' | 'size') => setOpen((p) => (p === panel ? null : panel))
   const pickColor = (c: string | null) => {
     run((ch) => (c ? ch.setColor(c) : ch.unsetColor()))
@@ -172,7 +187,7 @@ export function FormatControls({ editor, noteColor }: { editor: Editor; noteColo
               </>
             )}
             <label className="fmt-custom">
-              <input type="color" aria-label="Autre couleur" onChange={(e) => pickColor(e.target.value)} />
+              <input ref={customColor} type="color" aria-label="Autre couleur" defaultValue={s.color ?? '#1c1917'} />
               Autre couleur…
             </label>
           </div>
