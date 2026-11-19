@@ -128,3 +128,18 @@ it('deleting a board with rows from the future still restores them together', as
   await repo.restoreBoard(b.id)
   expect(await repo.listNotes(b.id)).toHaveLength(1)
 })
+
+it('usedTextColors reads every board but only notes with that background, skips deleted', async () => {
+  const a = await repo.createBoard('A')
+  const b = await repo.createBoard('B')
+  const n1 = await repo.addNote(a.id, { x: 0, y: 0 }, 'pink')
+  const n2 = await repo.addNote(b.id, { x: 0, y: 0 }, 'pink')
+  const other = await repo.addNote(b.id, { x: 0, y: 0 }, 'blue')
+  const gone = await repo.addNote(b.id, { x: 0, y: 0 }, 'pink')
+  await repo.updateNote(n1.id, { html: '<p><span style="color: #dc2626">x</span></p>' })
+  await repo.updateNote(n2.id, { html: '<p><span style="color: #2563eb">y</span></p>' })
+  await repo.updateNote(other.id, { html: '<p><span style="color: #16a34a">z</span></p>' })
+  await repo.updateNote(gone.id, { html: '<p><span style="color: #9333ea">w</span></p>' })
+  await repo.deleteNotes([gone.id])
+  expect((await repo.usedTextColors('pink')).sort()).toEqual(['#2563eb', '#dc2626'])
+})

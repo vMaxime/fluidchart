@@ -10,6 +10,7 @@ import {
   type Note,
   type NoteColor,
 } from '@chart/shared'
+import { extractTextColors } from '../canvas/textColors'
 import { db, type Local } from './db'
 
 // Sync contract: every write goes through this module, sets updatedAt = Date.now()
@@ -174,4 +175,12 @@ export async function deleteArrows(ids: Id[]): Promise<void> {
     const at = nextTime(...(await arrows.toArray()).map((a) => a.updatedAt))
     await arrows.modify({ deleted: true, updatedAt: at, dirty: 1 })
   })
+}
+
+/** Text colours already used on live notes with this background, across every board (max 12). */
+export async function usedTextColors(noteColor: NoteColor): Promise<string[]> {
+  const notes = await db.notes.filter((n) => !n.deleted && n.color === noteColor).toArray()
+  const colors = new Set<string>()
+  for (const n of notes) for (const c of extractTextColors(n.html)) colors.add(c)
+  return [...colors].slice(0, 12)
 }
