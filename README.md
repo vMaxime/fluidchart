@@ -1,57 +1,52 @@
-# Chart
+# fluidchart
 
-Un Lucidchart minimaliste pour réviser : des cartes, des post-it de couleur avec du texte mis en forme, des flèches. Hors ligne d'abord, synchronisé entre appareils via ton serveur, protégé par un code à 4 chiffres.
+Un Lucidchart minimaliste pour réviser. On y crée des cartes, on y pose des post-it de couleur avec du texte mis en forme, et on les relie par des flèches. L'app fonctionne d'abord hors ligne, se synchronise entre appareils via son propre serveur et se protège par un code à 4 chiffres.
 
-- `web/` : l'app (React, Vite, React Flow, TipTap). Les données vivent dans le navigateur (IndexedDB) et partent au serveur en arrière-plan.
-- `server/` : l'API (Hono, SQLite intégré à Node 22). Elle gère le code d'accès, la synchronisation et sert l'app.
-- `shared/` : le modèle de données et les règles partagées par les deux (dont le délai entre deux essais de code).
+## Ce que fait l'app
+
+- **Liste des cartes :** compacte et pilotable au clavier (↑↓, Entrée, F2, Suppr, `/` pour chercher, N pour créer). La recherche ignore les accents, et une suppression peut être annulée.
+- **Canvas infini :**
+  - outils Sélection (V), Post-it (N) et Flèche (A), avec une infobulle pour chacun ;
+  - des « + » sur les bords d'un post-it pour créer et relier le suivant ;
+  - une palette de couleurs au-dessus du post-it sélectionné ;
+  - des flèches courbes qui suivent les post-it.
+- **Texte des post-it :** éditeur riche (TipTap). Le texte est enregistré au fil de la frappe, avec une copie de secours locale en cas de fermeture brutale.
+- **Hors ligne :** l'app est installable et garde ses données dans le navigateur (IndexedDB). La synchro avec le serveur se fait en arrière-plan. Pour chaque élément, la dernière modification gagne.
+- **Accès :** un écran de code (pavé numérique) impose un délai entre deux essais, le même côté app et côté serveur. Un plafond global limite le nombre d'essais.
+
+## Organisation
+
+| Dossier | Contenu |
+| --- | --- |
+| `web/` | L'app : React, Vite, React Flow, TipTap, Dexie (IndexedDB) et une PWA. |
+| `server/` | L'API : Hono et le SQLite intégré à Node 22. Elle gère le code d'accès, la synchronisation et sert l'app. |
+| `shared/` | Le modèle de données et les règles communes aux deux. |
 
 ## Développer
 
-Pré-requis : Node 22.13 ou plus récent.
+Il faut Node 22.13 ou plus récent.
 
 ```bash
-npm install
-# terminal 1 : l'API (code de test 2468, cookie sans HTTPS en local)
-APP_PIN=2468 COOKIE_SECURE=0 npm -w server run dev
-# terminal 2 : l'app sur http://localhost:5173 (les appels /api partent vers le terminal 1)
-npm -w web run dev
+npm install                                        # installe aussi le contrôle anti-secrets des commits
+APP_PIN=2468 COOKIE_SECURE=0 npm -w server run dev # terminal 1 : l'API (2468 = code de développement)
+npm -w web run dev                                 # terminal 2 : l'app sur http://localhost:5173
 ```
+
+`2468` sert uniquement au développement et aux tests. N'utilisez jamais ce code en production.
 
 ## Tester
 
 ```bash
-npm test                 # tests unitaires (shared, server, web)
+npm test               # tests unitaires (shared, server, web)
 npm run typecheck
-npm -w web run e2e       # Chromium + WebKit contre le vrai serveur (base jetable)
+npm -w web run e2e     # Chromium et WebKit, contre le vrai serveur (base jetable)
 ```
 
-## Déployer sur le VPS
+## Mettre en production
 
-Pré-requis sur le VPS : Docker (avec Compose) et [Caddy](https://caddyserver.com/docs/install) pour le HTTPS.
+Le dépôt fournit une image Docker (`Dockerfile`, `docker-compose.yml`), à placer derrière un reverse proxy HTTPS (exemple Caddy dans `deploy/`). La configuration passe par des variables d'environnement : partez de `.env.example`.
 
-1. **Récupérer le projet** sur le VPS (par exemple avec `git clone`), puis entrer dans le dossier.
-2. **Choisir le code d'accès :**
-   ```bash
-   cp .env.example .env
-   nano .env            # APP_PIN=xxxx (4 chiffres)
-   ```
-   Le fichier `.env` reste sur le serveur et ne doit jamais être commité.
-3. **Lancer :**
-   ```bash
-   docker compose up -d --build
-   ```
-   L'app écoute uniquement sur `127.0.0.1:8787`. Les données vont dans le volume Docker `chart-data`.
-4. **Brancher le domaine :** ajouter le bloc de `deploy/Caddyfile.example` au Caddyfile du VPS (avec ton domaine), puis `sudo systemctl reload caddy`. Caddy obtient le certificat HTTPS tout seul.
-   Si Caddy tourne lui-même dans Docker, remplacer `127.0.0.1:8787` par le nom du service, sur un réseau Docker commun.
-5. **Sur le Mac de l'étudiant :** ouvrir le site dans Safari, entrer le code, puis **Fichier → Ajouter au Dock**. Installée ainsi, l'app garde ses données hors ligne (Safari efface celles des sites non installés après 7 jours sans visite).
+## Secrets
 
-**Mettre à jour :** `git pull && docker compose up -d --build`.
-
-**Changer le code :** modifier `APP_PIN` dans `.env`, puis `docker compose up -d`. Cela **déconnecte tous les appareils**, qui redemandent le nouveau code. Leurs fiches restent sur l'appareil et repartent au serveur après le déverrouillage. C'est aussi la marche à suivre si le code a fuité.
-
-### Sécurité du code
-
-- Le serveur impose 3 secondes entre deux essais depuis la même adresse. L'app affiche le même délai.
-- Au-delà de 30 codes faux en 24 heures, toutes adresses confondues, plus aucun nouvel appareil ne peut se connecter jusqu'à ce que la fenêtre se libère d'elle-même. Les appareils déjà connectés ne sont pas touchés.
-- La session dure un an par appareil (cookie `HttpOnly`, `Secure`, `SameSite=Lax`). Changer le code les révoque toutes.
+- Aucun secret n'est versionné. Le code d'accès vit uniquement dans le `.env` du serveur, ignoré par git.
+- Un hook de pre-commit (`.githooks/pre-commit`, activé par `npm install`) refuse tout commit qui contient un fichier `.env`, une clé privée ou un jeton.
