@@ -1,0 +1,29 @@
+# Example nginx server block for fluidchart behind an existing nginx (e.g. in the same Docker
+# Compose project: the app service is reachable as `fluidchart:8787`, with no published port).
+# Replace chart.example.com and the certificate paths.
+
+server {
+    listen 443 ssl;
+    server_name chart.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/chart.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/chart.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Sync requests of a large board can exceed nginx's 1 MB default; the app accepts up to 5 MB.
+    client_max_body_size 6m;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+
+    location / {
+        proxy_pass http://fluidchart:8787;
+        proxy_set_header Host $host;
+        # Overwrite, don't append ($proxy_add_x_forwarded_for): with TRUST_PROXY=1 the app reads the
+        # first X-Forwarded-For entry, which must not be client-controlled (PIN cooldown per IP).
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
