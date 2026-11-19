@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
-import type { NoteColor } from '@chart/shared'
+import { NOTE_COLOR_ORDER, NOTE_COLORS, type NoteColor } from '@chart/shared'
 import { usedTextColors } from '../db/repo'
 
 const HIGHLIGHTS: [string, string][] = [
@@ -19,6 +19,14 @@ const TEXT_COLORS: [string, string][] = [
   ['#ea580c', 'Orange'],
   ['#78716c', 'Gris'],
 ]
+const NOTE_COLOR_LABELS: Record<NoteColor, string> = {
+  yellow: 'Jaune',
+  pink: 'Rose',
+  blue: 'Bleu',
+  green: 'Vert',
+  orange: 'Orange',
+  purple: 'Violet',
+}
 const SIZES: [string | null, string][] = [
   ['12px', 'Petit'],
   [null, 'Normal'],
@@ -55,8 +63,17 @@ function Btn(props: {
 }
 
 /** The formatting controls of the floating bar (testable on their own with any editor). */
-export function FormatControls({ editor, noteColor }: { editor: Editor; noteColor: NoteColor }) {
-  const [open, setOpen] = useState<null | 'highlight' | 'color' | 'size'>(null)
+export function FormatControls({
+  editor,
+  noteColor,
+  onNoteColor,
+}: {
+  editor: Editor
+  noteColor: NoteColor
+  /** When given, the bar also offers the note's background colour. */
+  onNoteColor?(color: NoteColor): void
+}) {
+  const [open, setOpen] = useState<null | 'note' | 'highlight' | 'color' | 'size'>(null)
   const [used, setUsed] = useState<string[]>([])
   const customColor = useRef<HTMLInputElement>(null)
   const s = useEditorState({
@@ -91,7 +108,7 @@ export function FormatControls({ editor, noteColor }: { editor: Editor; noteColo
     editor.view.focus()
     return fn(editor.chain().focus()).run()
   }
-  const toggle = (panel: 'highlight' | 'color' | 'size') => setOpen((p) => (p === panel ? null : panel))
+  const toggle = (panel: 'note' | 'highlight' | 'color' | 'size') => setOpen((p) => (p === panel ? null : panel))
   const pickColor = (c: string | null) => {
     run((ch) => (c ? ch.setColor(c) : ch.unsetColor()))
     setOpen(null)
@@ -99,6 +116,35 @@ export function FormatControls({ editor, noteColor }: { editor: Editor; noteColo
 
   return (
     <div className="fmt" role="toolbar" aria-label="Mise en forme">
+      {onNoteColor && (
+        <>
+          <div className="fmt-group">
+            <Btn label="Couleur du post-it" active={open === 'note'} onClick={() => toggle('note')}>
+              <span className="fmt-note-swatch" style={{ background: NOTE_COLORS[noteColor] }} />
+            </Btn>
+            {open === 'note' && (
+              <div className="fmt-pop" role="group" aria-label="Couleur du post-it">
+                {NOTE_COLOR_ORDER.map((c) => (
+                  <Btn
+                    key={c}
+                    label={NOTE_COLOR_LABELS[c]}
+                    className="fmt-swatch"
+                    style={{ background: NOTE_COLORS[c] }}
+                    active={c === noteColor}
+                    onClick={() => {
+                      onNoteColor(c)
+                      setOpen(null)
+                    }}
+                  >
+                    {''}
+                  </Btn>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="fmt-sep" />
+        </>
+      )}
       <Btn label="Gras" active={s.bold} onClick={() => run((c) => c.toggleBold())}>
         <b>B</b>
       </Btn>

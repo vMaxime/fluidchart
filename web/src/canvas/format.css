@@ -1,14 +1,14 @@
-/* Floating format bar (rendered in <body>, under the selection) */
-.format-menu { z-index: 60; }
+/* Format bar: above the note while writing (in place of the colour palette) */
+.note-toolbar { z-index: 60; }
 .fmt {
   display: flex; align-items: center; gap: 2px; padding: 4px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
   font: 14px var(--font); color: var(--text);
   animation: fmt-in 140ms var(--ease-out);
-  transform-origin: top center;
+  transform-origin: bottom center;
 }
-@keyframes fmt-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+@keyframes fmt-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } }
 .fmt-group { position: relative; }
 .fmt-sep { width: 1px; height: 18px; margin: 0 3px; background: var(--border); }
 .fmt-btn {
@@ -20,20 +20,22 @@
 .fmt-btn:active { transform: scale(0.95); }
 .fmt-btn.is-active { background: #eef2ff; color: var(--accent); }
 .fmt-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.fmt-note-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgb(0 0 0 / 0.15); }
 .fmt-hl { padding: 0 3px; border-radius: 3px; background: #fde047; font-size: 13px; }
 .fmt-a { padding: 0 2px; border-bottom: 3px solid; line-height: 1.1; font-weight: 600; }
 .fmt-size { font-weight: 600; }
 .fmt-size small { font-size: 10px; }
 
 .fmt-pop {
-  position: absolute; top: calc(100% + 6px); left: 50%; z-index: 1;
+  /* Opens upward: the bar sits above the note, so a panel below it would hide the text being formatted. */
+  position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 1;
   display: flex; gap: 4px; padding: 6px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
   transform: translateX(-50%);
   animation: pop-in 140ms var(--ease-out);
 }
-@keyframes pop-in { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } }
+@keyframes pop-in { from { opacity: 0; transform: translateX(-50%) translateY(4px); } }
 .fmt-pop-color, .fmt-pop-size { flex-direction: column; align-items: stretch; }
 .fmt-row { display: flex; gap: 4px; }
 .fmt-swatch { width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid rgb(0 0 0 / 0.12); }
