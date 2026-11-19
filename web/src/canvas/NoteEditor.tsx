@@ -19,7 +19,8 @@ type Props = {
   onChange(html: string): void
   /** Called synchronously on every edit, for the crash-safe journal. */
   onDraft?(html: string): void
-  onDone(): void
+  /** Called once when editing ends, with the final html. */
+  onDone(html: string): void
   /** Text typed on a selected note before the editor opened (type-to-edit): appended once focused. */
   initialInput?: string
   /** The note's background, for the "Déjà utilisées" colours. */
@@ -34,11 +35,12 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
   })
   const debouncer = useMemo(() => createDebouncer<string>((v) => callbacks.current.onChange(v), SAVE_DELAY_MS), [])
   const finished = useRef(false)
+  const lastHtml = useRef(html)
   const finish = () => {
     debouncer.flush()
     if (finished.current) return
     finished.current = true
-    callbacks.current.onDone()
+    callbacks.current.onDone(lastHtml.current)
   }
 
   const editor = useEditor({
@@ -54,6 +56,7 @@ export function NoteEditor({ html, onChange, onDraft, onDone, initialInput, note
     },
     onUpdate: ({ editor }) => {
       const next = editor.getHTML()
+      lastHtml.current = next
       callbacks.current.onDraft?.(next)
       debouncer.call(next)
     },

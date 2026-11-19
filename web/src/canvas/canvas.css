@@ -136,3 +136,7 @@
 }
 .knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .react-flow__node.dragging .knob { opacity: 0; }
+
+.toolbar-sep { width: 24px; height: 1px; margin: 6px 0; background: var(--border); }
+.toolbar-btn:disabled { opacity: 0.35; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .toolbar-btn:disabled:hover { background: transparent; color: var(--text-muted); } }

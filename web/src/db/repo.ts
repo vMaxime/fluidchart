@@ -184,3 +184,23 @@ export async function usedTextColors(noteColor: NoteColor): Promise<string[]> {
   for (const n of notes) for (const c of extractTextColors(n.html)) colors.add(c)
   return [...colors].slice(0, 12)
 }
+
+export type TableName = 'boards' | 'notes' | 'arrows'
+export type AnyRow = Board | Note | Arrow
+
+/**
+ * Writes given versions back (undo / redo): `null` tombstones the row. Each write gets a fresh
+ * updatedAt after both the current and the target version, so it syncs like any other edit.
+ */
+export async function applySnapshots(rows: { table: TableName; id: Id; row: AnyRow | null }[]): Promise<void> {
+  await db.transaction('rw', db.boards, db.notes, db.arrows, async () => {
+    for (const r of rows) {
+      const table = db[r.table] as unknown as typeof db.notes
+      const current = await table.get(r.id)
+      const at = nextTime(current?.updatedAt ?? 0, r.row?.updatedAt ?? 0)
+      if (r.row === null) {
+        if (current && !current.deleted) await table.update(r.id, { deleted: true, updatedAt: at, dirty: 1 })
+      } else await table.put({ ...(r.row as Note), updatedAt: at, dirty: 1 })
+    }
+  })
+}

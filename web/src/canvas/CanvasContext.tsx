@@ -15,7 +15,8 @@ export const CanvasContext = createContext<{
   arrowTarget: Id | null
   freshIds: ReadonlySet<Id>
   startEditing(id: Id, initialInput?: string): void
-  stopEditing(): void
+  /** `finalHtml`: the note's text when the editor closed (one undo step per writing session). */
+  stopEditing(finalHtml?: string): void
   recolor(id: Id, color: NoteColor): void
   startArrow(id: Id, e: ReactPointerEvent): void
   /** Press on a + knob: tap grows a connected note on that side, drag connects or grows where dropped. */
