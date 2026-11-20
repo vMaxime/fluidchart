@@ -1,6 +1,5 @@
 import { memo, useContext } from 'react'
 import { Handle, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
-import DOMPurify from 'dompurify'
 import { NOTE_COLORS } from '@chart/shared'
 import { clearJournal, journalNoteHtml } from '../db/noteJournal'
 import { updateNote } from '../db/repo'
@@ -8,6 +7,7 @@ import { trackWrite } from '../db/saveErrors'
 import { CanvasContext } from './CanvasContext'
 import type { Side } from './edgeGeometry'
 import type { NoteFlowNode } from './flowMapping'
+import { NoteBody } from './NoteBody'
 import { NoteEditor } from './NoteEditor'
 import { NotePalette } from './NotePalette'
 
@@ -61,7 +61,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
           onDone={(finalHtml) => ctx.stopEditing(finalHtml, note.id)}
         />
       ) : (
-        <div className="note-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.html) }} />
+        <NoteBody html={note.html} />
       )}
       {ctx.tool === 'select' &&
         !editing &&

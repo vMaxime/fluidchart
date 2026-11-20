@@ -19,7 +19,8 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
-    command: 'npm run build && (cd ../server && node build.mjs) && node --disable-warning=ExperimentalWarning ../server/dist/server.js',
+    command:
+      'npm run build && (cd ../server && node build.mjs) && node --disable-warning=ExperimentalWarning ../server/dist/server.js',
     url: `http://localhost:${PORT}/api/session`,
     reuseExistingServer: false,
     timeout: 180_000,
@@ -30,6 +31,8 @@ export default defineConfig({
       STATIC_DIR: 'dist',
       COOKIE_SECURE: '0',
       E2E_RESET: '1',
+      // Fake token for tests that build boards through the API.
+      API_TOKEN: 'e2e-fake-token-0123456789abcdef01234567',
     },
   },
 })
