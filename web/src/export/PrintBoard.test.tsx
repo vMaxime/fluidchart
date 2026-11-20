@@ -56,3 +56,9 @@ it('pageRule gives the board-sized page for revision and A4 in the chosen orient
   expect(pageRule('printer', wide)).toBe('@page { size: A4 landscape; margin: 10mm }')
   expect(pageRule('printer', [note('a', 0, 0), note('b', 0, 2000)])).toBe('@page { size: A4 portrait; margin: 10mm }')
 })
+
+it('printer pages stay a little shorter than the A4 printable height, so no rounding spills a blank page', () => {
+  const { container } = render(<PrintBoard name="H" format="printer" notes={[note('a', 0, 0)]} arrows={[]} />)
+  const page = container.querySelector<HTMLElement>('.print-page')!
+  expect(parseFloat(page.style.height)).toBeLessThanOrEqual(((190 - 0.5) * 96) / 25.4)
+})

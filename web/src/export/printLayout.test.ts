@@ -60,3 +60,12 @@ it('revisionPage pads by 32px and shrinks a board larger than 19200px', () => {
   expect(huge.scale).toBeCloseTo((19200 - 64) / 30000, 9)
   expect(huge.height).toBeCloseTo(1000 * huge.scale + 64, 9)
 })
+
+it('a tiny or zero font size can neither enlarge the board nor explode the page count', () => {
+  expect(
+    smallestTextPx(['<p><span style="font-size: 0px;">caché</span><span style="font-size: 1px;">x</span></p>']),
+  ).toBe(10)
+  const l = printerLayout(box(3000, 2000), smallestTextPx(['<p><span style="font-size: 1px;">x</span></p>']))
+  expect(l.scale).toBeLessThanOrEqual(1)
+  expect(l.tiles.length).toBeLessThanOrEqual(printerLayout(box(3000, 2000), 10).tiles.length)
+})

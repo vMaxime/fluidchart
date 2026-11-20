@@ -158,3 +158,29 @@ test('the button is disabled on an empty board', async ({ page }) => {
   await newBoard(page, 'Vide')
   await expect(page.getByRole('button', { name: 'Exporter en PDF' })).toBeDisabled()
 })
+
+test('⌘P without an export prints the app as before, not a blank page', async ({ page }) => {
+  await newBoard(page, 'Imprimer')
+  await createNote(page, { x: 300, y: 200 }, 'Visible')
+  await page.emulateMedia({ media: 'print' })
+  await expect(page.locator('#root')).not.toHaveCSS('display', 'none')
+  await expect(page.getByTestId('note')).toBeVisible()
+})
+
+test('an export left without afterprint is cleaned up by the next click; renaming meanwhile does not print again', async ({
+  page,
+}) => {
+  await newBoard(page, 'Sans fin')
+  await createNote(page, { x: 300, y: 200 }, 'Une')
+  const before = await page.title()
+  await exportAs(page, 'Format révision')
+  await expect.poll(() => prints(page)).toBe(1)
+  await page.getByRole('textbox', { name: 'Nom de la carte' }).fill('Renommée')
+  await page.keyboard.press('Enter')
+  await page.locator('.react-flow__pane').click({ position: { x: 600, y: 400 } })
+  await expect(page.locator('.print-root')).toHaveCount(0)
+  await expect(page.locator('style[data-print-page]')).toHaveCount(0)
+  expect(await prints(page)).toBe(1)
+  await expect(page).not.toHaveTitle('Sans fin')
+  expect(before).not.toBe('Sans fin')
+})

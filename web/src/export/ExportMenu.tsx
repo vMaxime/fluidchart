@@ -21,7 +21,12 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
   const { getInternalNode } = useReactFlow()
   const noteCount = useLiveQuery(async () => (await listNotes(boardId)).length, [boardId])
   const [open, setOpen] = useState(false)
-  const [job, setJob] = useState<{ format: PrintFormat; notes: PrintNote[]; arrows: Arrow[] } | null>(null)
+  const [job, setJob] = useState<{
+    format: PrintFormat
+    name: string
+    notes: PrintNote[]
+    arrows: Arrow[]
+  } | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const empty = !noteCount
 
@@ -44,7 +49,7 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     // saved as its editor lost focus to this menu.
     const [rows, arrows] = await Promise.all([listNotes(boardId), listArrows(boardId)])
     const notes = rows.map((note) => ({ note, height: getInternalNode(note.id)?.measured.height ?? 64 }))
-    setJob({ format, notes, arrows })
+    setJob({ format, name, notes, arrows })
   }
 
   // While a job is mounted: its @page rule, the board name as document title (the PDF's file name),
@@ -56,21 +61,33 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     style.textContent = pageRule(job.format, job.notes)
     document.head.append(style)
     const title = document.title
-    document.title = name
+    document.title = job.name
     let live = true
     const done = () => setJob(null)
     window.addEventListener('afterprint', done)
+    // Should afterprint never come (a print prompt dismissed in Safari…), the next press or key
+    // on the page cleans up: the print dialog is modal, so none can reach the page before it closes.
+    const fallback = () => {
+      window.addEventListener('pointerdown', done, { capture: true, once: true })
+      window.addEventListener('keydown', done, { capture: true, once: true })
+    }
     void document.fonts.ready
       .then(nextFrame)
       .then(nextFrame)
-      .then(() => live && window.print())
+      .then(() => {
+        if (!live) return
+        window.print()
+        fallback()
+      })
     return () => {
       live = false
       window.removeEventListener('afterprint', done)
+      window.removeEventListener('pointerdown', done, { capture: true })
+      window.removeEventListener('keydown', done, { capture: true })
       style.remove()
       document.title = title
     }
-  }, [job, name])
+  }, [job])
 
   return (
     <div className="export" ref={root}>
@@ -97,7 +114,7 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
       {job &&
         createPortal(
           <div className="print-root">
-            <PrintBoard name={name} format={job.format} notes={job.notes} arrows={job.arrows} />
+            <PrintBoard name={job.name} format={job.format} notes={job.notes} arrows={job.arrows} />
           </div>,
           document.body,
         )}

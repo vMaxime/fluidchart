@@ -5,6 +5,8 @@ export type Box = { x: number; y: number; width: number; height: number }
 const MM = 96 / 25.4
 const PT = 4 / 3
 const NORMAL_TEXT_PX = 14
+/** Pasted text can carry any size (even 0px): smaller sizes count as this one. */
+const SMALLEST_COUNTED_PX = 10
 /** The smallest text must stay at least this size on paper. */
 const MIN_TEXT_PT = 8
 /** Revision format: margin around the board. */
@@ -27,12 +29,12 @@ export function boardBounds(rects: Box[]): Box {
   return { x, y, width: right - x, height: bottom - y }
 }
 
-/** The smallest text size used on the board, in px (normal text is 14px). */
+/** The smallest text size used on the board, in px (normal text is 14px, never under 10px). */
 export function smallestTextPx(htmls: string[]): number {
   let smallest = NORMAL_TEXT_PX
   for (const html of htmls)
     for (const m of html.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)) smallest = Math.min(smallest, Number(m[1]))
-  return smallest
+  return Math.max(SMALLEST_COUNTED_PX, smallest)
 }
 
 /** One page the size of the board plus a margin; a board beyond the PDF page limit is scaled down. */
@@ -67,7 +69,8 @@ export function printerLayout(bounds: Box, smallestPx: number): PrinterLayout {
   const H = Math.max(bounds.height, 1)
   /** Tie-break: follow the board's shape. */
   const byShape: Orientation = W > H ? 'landscape' : 'portrait'
-  const minScale = (MIN_TEXT_PT * PT) / smallestPx
+  // Never enlarged: tiles are at most the board's real size.
+  const minScale = Math.min(1, (MIN_TEXT_PT * PT) / Math.max(smallestPx, SMALLEST_COUNTED_PX))
 
   const fit = (o: Orientation) => Math.min(1, AREA[o].width / W, AREA[o].height / H)
   const [l, p] = [fit('landscape'), fit('portrait')]

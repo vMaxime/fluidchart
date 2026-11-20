@@ -5,7 +5,7 @@
   }
 }
 @media print {
-  body > :not(.print-root) {
+  body:has(> .print-root) > :not(.print-root) {
     display: none !important;
   }
   html,

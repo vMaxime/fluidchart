@@ -10,6 +10,8 @@ export type PrintFormat = 'revision' | 'printer'
 
 const MM = 96 / 25.4
 const FOOTER = 8 * MM
+/** Printer pages stay 1mm short of the printable height: no rounding can spill a blank page. */
+const SAFETY = 1 * MM
 const PAD = 32
 
 const rectOf = ({ note, height }: PrintNote): Box => ({ x: note.x, y: note.y, width: note.width, height })
@@ -133,7 +135,11 @@ export function PrintBoard({
   return (
     <>
       {tiles.map((tile, i) => (
-        <div key={i} className="print-page print-a4" style={{ width: area.width, height: area.height + FOOTER }}>
+        <div
+          key={i}
+          className="print-page print-a4"
+          style={{ width: area.width, height: area.height + FOOTER - SAFETY }}
+        >
           <div className="print-tile" style={{ width: area.width, height: area.height }}>
             <div className="print-board" style={{ transform: `translate(${-tile.x}px, ${-tile.y}px) scale(${scale})` }}>
               {drawing}
