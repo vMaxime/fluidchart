@@ -20,6 +20,8 @@ export interface Note extends Entity {
   x: number
   y: number
   width: number
+  /** Minimum height in px; absent = automatic (the height follows the text). */
+  height?: number
   color: NoteColor
   html: string
 }
@@ -33,6 +35,11 @@ export interface Arrow extends Entity {
 }
 
 export const DEFAULT_NOTE_WIDTH = 200
+export const MIN_NOTE_WIDTH = 120
+export const MAX_NOTE_WIDTH = 800
+/** Smallest minimum height; a height at or under it means "automatic". */
+export const MIN_NOTE_HEIGHT = 64
+export const MAX_NOTE_HEIGHT = 5000
 export const UNTITLED_BOARD = 'Sans titre'
 
 export function normalizeBoardName(name: string): string {

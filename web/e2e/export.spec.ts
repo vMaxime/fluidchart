@@ -184,3 +184,48 @@ test('an export left without afterprint is cleaned up by the next click; renamin
   await expect(page).not.toHaveTitle('Sans fin')
   expect(before).not.toBe('Sans fin')
 })
+
+test('a resized note keeps its size in the PDF export', async ({ page }) => {
+  await newBoard(page, 'Grande')
+  await createNote(page, { x: 300, y: 200 }, 'Large')
+  await notes(page).first().click()
+  const small = (await notes(page).first().boundingBox())!
+  const handle = (await page.locator('.react-flow__resize-control').boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + 160, handle.y + 110, { steps: 10 })
+  await page.mouse.up()
+  await expect.poll(async () => (await notes(page).first().boundingBox())!.width).toBeGreaterThan(300)
+
+  await exportAs(page, 'Format révision')
+  const printed = await page
+    .locator('.print-root .print-note')
+    .evaluate((el: HTMLElement) => ({ width: parseFloat(el.style.width), height: parseFloat(el.style.height) }))
+  const now = (await notes(page).first().boundingBox())!
+  expect(Math.abs(printed.width - now.width)).toBeLessThan(2)
+  expect(Math.abs(printed.height - now.height)).toBeLessThan(2)
+  expect(printed.height).toBeGreaterThan(small.height + 80)
+})
+
+test('after dragging the handle up on a tall note, the printed box still holds its text', async ({ page }) => {
+  await newBoard(page, 'Haute')
+  await createNote(page, { x: 300, y: 200 }, 'x')
+  await notes(page).first().dblclick()
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type(Array.from({ length: 30 }, (_, i) => `mot${i}`).join(' '))
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await notes(page).first().click()
+  const tall = (await notes(page).first().boundingBox())!
+  const handle = (await page.locator('.react-flow__resize-control').boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 - 50, { steps: 10 })
+  await page.mouse.up()
+  await exportAs(page, 'Format révision')
+  const printed = await page
+    .locator('.print-root .print-note')
+    .evaluate((el: HTMLElement) => parseFloat(el.style.height))
+  expect(printed).toBeGreaterThanOrEqual(Math.floor(tall.height))
+})

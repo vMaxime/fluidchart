@@ -13,7 +13,7 @@ import {
   type OnNodesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { DEFAULT_NOTE_WIDTH, type ArrowColor, type Id, type NoteColor } from '@chart/shared'
+import { DEFAULT_NOTE_WIDTH, MIN_NOTE_HEIGHT, type ArrowColor, type Id, type NoteColor } from '@chart/shared'
 import {
   addArrow,
   addNote,
@@ -158,6 +158,27 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     [boardId, history, selectNewArrow],
   )
 
+  const resizing = useCallback((id: Id, size: { width: number; height: number | null }) => {
+    setNodes(
+      (cur) =>
+        cur &&
+        cur.map((n) => {
+          if (n.id !== id) return n
+          const height =
+            size.height === null ? n.data.note.height : size.height > MIN_NOTE_HEIGHT ? size.height : undefined
+          return { ...n, data: { note: { ...n.data.note, width: size.width, height } } }
+        }),
+    )
+  }, [])
+  const resized = useCallback(
+    (id: Id, size: { width: number; height: number | null }) => {
+      const patch: { width: number; height?: number } = { width: Math.round(size.width) }
+      if (size.height !== null) patch.height = size.height > MIN_NOTE_HEIGHT ? Math.round(size.height) : undefined
+      void trackWrite(history.record(() => updateNote(id, patch)))
+    },
+    [history],
+  )
+
   const arrow = useArrowDrag((from, { to }) => {
     if (!to) return // missed: stay in arrow mode, Escape to give up
     drawArrow(from, to)
@@ -274,7 +295,21 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   // Removals go through onDelete (tombstones in the db, one undo step), never local-only.
   const onNodesChange: OnNodesChange<NoteFlowNode> = useCallback((changes) => {
     for (const c of changes.getByType('remove')) changes.remove(c)
-    setNodes((nds) => (nds ? changes.applyTo(nds) : nds))
+    // The size React Flow measures must stay the real one (it feeds arrows, + knobs and the PDF):
+    // the resize handle's changes are applied by hand, width only, and never reach `measured`. A
+    // chosen height is the note's min-height instead (a note never cuts its text).
+    const resize = changes.getByType('dimensions').filter((c) => c.resizing !== undefined)
+    for (const c of resize) changes.remove(c)
+    setNodes((nds) => {
+      if (!nds) return nds
+      const next = changes.applyTo(nds)
+      if (!resize.length) return next
+      return next.map((n) => {
+        const c = resize.find((r) => r.id === n.id)
+        if (!c) return n
+        return { ...n, resizing: c.resizing, width: c.setAttributes && c.dimensions ? c.dimensions.width : n.width }
+      })
+    })
   }, [])
   const onEdgesChange: OnEdgesChange<ArrowFlowEdge> = useCallback((changes) => {
     for (const c of changes.getByType('remove')) changes.remove(c)
@@ -302,6 +337,8 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       stopEditing,
       recolor,
       recolorArrow,
+      resizing,
+      resized,
       startArrow: (id: Id, e: React.PointerEvent) => arrow.start(id, e, undefined),
       startKnob: (id: Id, side: Side, e: React.PointerEvent) => knob.start(id, e, side),
       growBeside,
@@ -320,6 +357,8 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       stopEditing,
       recolor,
       recolorArrow,
+      resizing,
+      resized,
     ],
   )
 

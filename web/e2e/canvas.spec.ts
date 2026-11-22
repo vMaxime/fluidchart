@@ -285,3 +285,160 @@ test('a new arrow shows its colour palette; the colour can be undone and survive
   await page.reload()
   await expect(page.locator('.react-flow__edge path.arrow')).toHaveCSS('stroke', 'rgb(220, 38, 38)')
 })
+
+// Resizing: the ◢ handle of the selected note, dragged by (dx, dy).
+const resizeHandle = (page: Page) => page.locator('.react-flow__resize-control')
+async function dragHandle(page: Page, dx: number, dy: number) {
+  const b = (await resizeHandle(page).boundingBox())!
+  const x = b.x + b.width / 2
+  const y = b.y + b.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + dx, y + dy, { steps: 10 })
+  await page.mouse.up()
+}
+const size = async (l: Locator) => {
+  const b = (await l.boundingBox())!
+  return { width: Math.round(b.width), height: Math.round(b.height) }
+}
+const storedSizes = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<{ width: number; height?: number }[]>((resolve) => {
+        const req = indexedDB.open('chart')
+        req.onsuccess = () => {
+          const all = req.result.transaction('notes').objectStore('notes').getAll()
+          all.onsuccess = () =>
+            resolve(all.result.map((n: { width: number; height?: number }) => ({ width: n.width, height: n.height })))
+        }
+      }),
+  )
+
+test('dragging the corner handle resizes the note; reload keeps it; ⌘Z / ⇧⌘Z undo it in one step', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 200 })
+  await notes(page).first().click()
+  await expect(resizeHandle(page)).toHaveCount(1)
+  const before = await size(notes(page).first())
+  await dragHandle(page, 120, 90)
+  const after = await size(notes(page).first())
+  expect(after.width).toBeGreaterThan(before.width + 100)
+  expect(after.height).toBeGreaterThan(before.height + 70)
+  await expect.poll(async () => (await storedSizes(page))[0].width).toBeGreaterThan(300)
+  expect((await storedSizes(page))[0].height).toBeGreaterThan(130)
+
+  // One undo step brings back both sizes; redo restores both. (History lives until the page closes.)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect.poll(() => size(notes(page).first())).toEqual(before)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect.poll(() => size(notes(page).first())).toEqual(after)
+  await expect.poll(async () => (await storedSizes(page))[0].width).toBeGreaterThan(300)
+
+  await page.reload()
+  await expect.poll(() => size(notes(page).first())).toEqual(after)
+})
+
+test('no resize handle while writing; text taller than the chosen height still grows the note', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await expect(editor(page)).toBeFocused()
+  await expect(resizeHandle(page)).toHaveCount(0)
+  await page.keyboard.type('Une ligne')
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await notes(page).first().click()
+  await dragHandle(page, 0, 120) // taller than its one line of text
+  const tall = (await size(notes(page).first())).height
+  expect(tall).toBeGreaterThan(150)
+  // Long text in a narrow note: the note grows past the chosen minimum, nothing is cut.
+  await notes(page).first().dblclick()
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type(Array.from({ length: 40 }, (_, i) => `ligne${i}`).join(' '))
+  await page.keyboard.press('Escape')
+  await expect.poll(async () => (await size(notes(page).first())).height).toBeGreaterThan(tall)
+})
+
+test('dragging the handle back to the top gives the automatic height again', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 200 })
+  await notes(page).first().click()
+  const auto = await size(notes(page).first())
+  await dragHandle(page, 0, 100)
+  await expect.poll(async () => (await storedSizes(page))[0].height).toBeGreaterThan(100)
+  await dragHandle(page, 0, -400)
+  await expect.poll(async () => (await storedSizes(page))[0].height).toBeUndefined()
+  expect((await size(notes(page).first())).height).toBe(auto.height)
+})
+
+const storedRows = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<{ updatedAt: number; height?: number }[]>((resolve) => {
+        const req = indexedDB.open('chart')
+        req.onsuccess = () => {
+          const all = req.result.transaction('notes').objectStore('notes').getAll()
+          all.onsuccess = () => resolve(all.result)
+        }
+      }),
+  )
+const typeInto = async (page: Page, text: string) => {
+  await notes(page).first().dblclick()
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type(text)
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+}
+
+test('dragging the handle up on a note with taller text leaves its measured height right (arrows, +, PDF)', async ({
+  page,
+}) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 200 })
+  await typeInto(page, Array.from({ length: 30 }, (_, i) => `mot${i}`).join(' '))
+  await notes(page).first().click()
+  const tall = await size(notes(page).first())
+  expect(tall.height).toBeGreaterThan(100)
+  await dragHandle(page, 0, -50)
+  expect((await size(notes(page).first())).height).toBe(tall.height)
+  // The bottom + sits below the real bottom edge, not 50px inside the note.
+  const box = (await notes(page).first().boundingBox())!
+  const plus = (await page.getByRole('button', { name: 'Nouveau post-it en dessous' }).boundingBox())!
+  expect(plus.y).toBeGreaterThan(box.y + box.height - 2)
+})
+
+test('widening with a slight vertical wobble keeps the automatic height', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 200 })
+  await typeInto(page, 'deux lignes de texte ici dans la note')
+  await notes(page).first().click()
+  await dragHandle(page, 200, 3)
+  await expect.poll(async () => (await storedSizes(page))[0].width).toBeGreaterThan(350)
+  expect((await storedSizes(page))[0].height).toBeUndefined()
+})
+
+test('a click on the handle without moving writes nothing', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 300, y: 200 })
+  await notes(page).first().click()
+  const before = (await storedRows(page))[0].updatedAt
+  await dragHandle(page, 0, 0)
+  await page.waitForTimeout(300)
+  expect((await storedRows(page))[0].updatedAt).toBe(before)
+})
+
+test('with several notes selected there is no resize handle', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 250, y: 200 })
+  await createNote(page, { x: 650, y: 200 })
+  await notes(page).nth(0).click()
+  await expect(resizeHandle(page)).toHaveCount(1)
+  // Rubber band over both notes.
+  await page.mouse.move(150, 140)
+  await page.mouse.down()
+  await page.mouse.move(950, 400, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2)
+  await expect(resizeHandle(page)).toHaveCount(0)
+})

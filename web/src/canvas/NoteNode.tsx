@@ -1,6 +1,6 @@
-import { memo, useContext } from 'react'
-import { Handle, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
-import { NOTE_COLORS } from '@chart/shared'
+import { memo, useContext, useRef } from 'react'
+import { Handle, NodeResizeControl, NodeToolbar, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { MAX_NOTE_HEIGHT, MAX_NOTE_WIDTH, MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, NOTE_COLORS } from '@chart/shared'
 import { clearJournal, journalNoteHtml } from '../db/noteJournal'
 import { updateNote } from '../db/repo'
 import { trackWrite } from '../db/saveErrors'
@@ -10,6 +10,9 @@ import type { NoteFlowNode } from './flowMapping'
 import { NoteBody } from './NoteBody'
 import { NoteEditor } from './NoteEditor'
 import { NotePalette } from './NotePalette'
+
+/** A height drag shorter than this (screen px) leaves the note's height as it was. */
+const HEIGHT_DEAD_ZONE_PX = 6
 
 const cls = (...names: (string | false)[]) => names.filter(Boolean).join(' ')
 
@@ -24,6 +27,15 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
   const { note } = data
   const ctx = useContext(CanvasContext)
   const editing = ctx.editingId === note.id
+  const { getZoom } = useReactFlow()
+  const startWidth = useRef(0)
+  const startHeight = useRef(0)
+  // The height counts as changed only when the handle moved it by a deliberate amount: a hand
+  // widening a note always wobbles a little vertically, and that must not pin its height.
+  const sizeOf = (p: { width: number; height: number }) => ({
+    width: p.width,
+    height: Math.abs(p.height - startHeight.current) * getZoom() < HEIGHT_DEAD_ZONE_PX ? null : p.height,
+  })
   return (
     <div
       className={cls(
@@ -34,7 +46,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
       )}
       data-testid="note"
       data-color={note.color}
-      style={{ background: NOTE_COLORS[note.color] }}
+      style={{ background: NOTE_COLORS[note.color], minHeight: note.height }}
       onPointerDown={ctx.tool === 'arrow' ? (e) => ctx.startArrow(note.id, e) : undefined}
     >
       {/* Arrows are drawn from note geometry, but React Flow still expects a handle on each end. */}
@@ -62,6 +74,32 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
         />
       ) : (
         <NoteBody html={note.html} />
+      )}
+      {/* One handle, for a lone selected note: with several selected, a drag moves the group. */}
+      {ctx.paletteFor === note.id && !editing && ctx.tool === 'select' && (
+        <NodeResizeControl
+          className="note-resize nodrag nopan"
+          position="bottom-right"
+          minWidth={MIN_NOTE_WIDTH}
+          maxWidth={MAX_NOTE_WIDTH}
+          minHeight={MIN_NOTE_HEIGHT}
+          maxHeight={MAX_NOTE_HEIGHT}
+          onResizeStart={(_e, p) => {
+            startWidth.current = p.width
+            startHeight.current = p.height
+          }}
+          onResize={(_e, p) => ctx.resizing(note.id, sizeOf(p))}
+          onResizeEnd={(_e, p) => {
+            // A click on the handle (nothing moved) writes nothing: sync is last-write-wins per row.
+            const size = sizeOf(p)
+            if (size.height === null && Math.abs(p.width - startWidth.current) < 0.5) return
+            ctx.resized(note.id, size)
+          }}
+        >
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M9 3 3 9M9 6.5 6.5 9" />
+          </svg>
+        </NodeResizeControl>
       )}
       {ctx.tool === 'select' &&
         !editing &&

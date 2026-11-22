@@ -4,6 +4,10 @@ import {
   ARROW_COLOR_ORDER,
   DEFAULT_ARROW_COLOR,
   DEFAULT_NOTE_WIDTH,
+  MAX_NOTE_HEIGHT,
+  MAX_NOTE_WIDTH,
+  MIN_NOTE_HEIGHT,
+  MIN_NOTE_WIDTH,
   NOTE_COLOR_ORDER,
   UNTITLED_BOARD,
   type ArrowColor,
@@ -41,10 +45,14 @@ export const NoteInputSchema = z.object({
   y: coordinate('verticale (vers le bas)'),
   width: z
     .number()
-    .min(120)
-    .max(600)
+    .min(MIN_NOTE_WIDTH)
+    .max(MAX_NOTE_WIDTH)
     .default(DEFAULT_NOTE_WIDTH)
-    .meta({ description: 'Largeur en px ; la hauteur suit le texte.' }),
+    .meta({ description: 'Largeur en px.' }),
+  height: z.number().min(MIN_NOTE_HEIGHT).max(MAX_NOTE_HEIGHT).optional().meta({
+    description:
+      "Hauteur minimale en px (facultatif). Sans elle, la hauteur suit le texte ; avec elle, le post-it est au moins aussi haut, et plus si le texte l'exige.",
+  }),
 })
 
 export const ArrowInputSchema = z.object({
@@ -122,6 +130,7 @@ export const BoardDetailSchema = z.object({
       x: z.number(),
       y: z.number(),
       width: z.number(),
+      height: z.number().optional(),
     }),
   ),
   arrows: z.array(z.object({ from: z.string(), to: z.string(), color: z.enum(ARROW_COLORS) })),

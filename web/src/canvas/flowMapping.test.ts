@@ -55,3 +55,15 @@ it('mergeEdges colours an arrow and its head', () => {
   expect(edge.data).toEqual({ color: 'red' })
   expect(edge.markerEnd).toMatchObject({ color: ARROW_COLORS.red })
 })
+
+it('a note being resized keeps its live size over the db, then follows the db again', () => {
+  const live = { ...note, width: 320, height: 150 }
+  const resizing = [
+    { id: 'n1', type: 'note', position: { x: 10, y: 10 }, data: { note: live }, resizing: true, width: 320 },
+  ] as any
+  const [kept] = mergeNodes([note], resizing)
+  expect(kept.width).toBe(320)
+  expect(kept.data.note).toMatchObject({ width: 320, height: 150 })
+  const idle = [{ ...resizing[0], resizing: false }] as any
+  expect(mergeNodes([{ ...note, width: 200 }], idle)[0].width).toBe(200)
+})

@@ -58,6 +58,8 @@ it('the input schema lists the note colours and the limits', async () => {
   expect(schema.properties.notes.maxItems).toBe(1000)
   expect(schema.properties.notes.items.properties.color.enum).toEqual(NOTE_COLOR_ORDER)
   expect(schema.properties.notes.items.properties.html.maxLength).toBe(20000)
+  expect(schema.properties.notes.items.properties.width.maximum).toBe(800)
+  expect(schema.properties.notes.items.properties.height).toMatchObject({ minimum: 64, maximum: 5000 })
   expect(schema.properties.arrows.items.properties.color.enum).toEqual(ARROW_COLOR_ORDER)
   expect(schema.required).toEqual(['name', 'notes'])
 })
