@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   DEFAULT_ARROW_COLOR,
+  MAX_NOTE_HEIGHT,
   newArrow,
   newBoard,
   newNote,
@@ -81,7 +82,8 @@ export function readBoard(db: DatabaseSync, id: string, origin: string): BoardDe
       x,
       y,
       width,
-      ...(height !== undefined && { height }),
+      // A client may have stored more than the API accepts: clamp, so a read board posts back.
+      ...(height !== undefined && { height: Math.min(height, MAX_NOTE_HEIGHT) }),
     })),
     // An arrow whose note is gone would make this output an invalid POST body. Sorted by their
     // notes' order, so reading the same board always gives the same output.

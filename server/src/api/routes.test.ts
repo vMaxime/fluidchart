@@ -349,3 +349,20 @@ it('auto layout leaves room under a note given a tall minimum height', async () 
   const enfant = body.notes.find((n) => n.html === '<p>E</p>')!
   expect(enfant.y).toBeGreaterThanOrEqual(parent.y + 600)
 })
+
+it('GET clamps a stored height above 5000 so the board can be posted back', async () => {
+  const app = make()
+  const created = (await (
+    await post(app, { name: 'Géante', notes: [{ id: 'a', html: 'A', x: 0, y: 0 }] })
+  ).json()) as Detail
+  const row = db.prepare("SELECT data FROM entities WHERE kind = 'note' AND board_id = ?").get(created.id) as {
+    data: string
+  }
+  const note = { ...JSON.parse(row.data), height: 6264, updatedAt: created.updatedAt + 1 }
+  applyChanges(db, [{ kind: 'note', row: note }])
+  const read = await read2(app, created.id)
+  expect((read.notes[0] as { height?: number }).height).toBe(5000)
+  expect((await post(app, read)).status).toBe(201)
+})
+const read2 = async (app: ReturnType<typeof make>, id: string) =>
+  (await (await app.request(`/api/v1/boards/${id}`, bearer())).json()) as Detail

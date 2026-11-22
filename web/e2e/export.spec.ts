@@ -206,3 +206,26 @@ test('a resized note keeps its size in the PDF export', async ({ page }) => {
   expect(Math.abs(printed.height - now.height)).toBeLessThan(2)
   expect(printed.height).toBeGreaterThan(small.height + 80)
 })
+
+test('after dragging the handle up on a tall note, the printed box still holds its text', async ({ page }) => {
+  await newBoard(page, 'Haute')
+  await createNote(page, { x: 300, y: 200 }, 'x')
+  await notes(page).first().dblclick()
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type(Array.from({ length: 30 }, (_, i) => `mot${i}`).join(' '))
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await notes(page).first().click()
+  const tall = (await notes(page).first().boundingBox())!
+  const handle = (await page.locator('.react-flow__resize-control').boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 - 50, { steps: 10 })
+  await page.mouse.up()
+  await exportAs(page, 'Format révision')
+  const printed = await page
+    .locator('.print-root .print-note')
+    .evaluate((el: HTMLElement) => parseFloat(el.style.height))
+  expect(printed).toBeGreaterThanOrEqual(Math.floor(tall.height))
+})

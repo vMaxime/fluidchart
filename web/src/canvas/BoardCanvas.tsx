@@ -295,14 +295,21 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   // Removals go through onDelete (tombstones in the db, one undo step), never local-only.
   const onNodesChange: OnNodesChange<NoteFlowNode> = useCallback((changes) => {
     for (const c of changes.getByType('remove')) changes.remove(c)
-    // The resize handle sets both sizes on the node; only the width is kept there: the height stays
-    // measured (a note never cuts its text), and a chosen height is the note's min-height instead.
-    for (const c of changes.getByType('dimensions'))
-      if (c.setAttributes) {
-        changes.remove(c)
-        changes.add({ ...c, setAttributes: 'width' })
-      }
-    setNodes((nds) => (nds ? changes.applyTo(nds) : nds))
+    // The size React Flow measures must stay the real one (it feeds arrows, + knobs and the PDF):
+    // the resize handle's changes are applied by hand, width only, and never reach `measured`. A
+    // chosen height is the note's min-height instead (a note never cuts its text).
+    const resize = changes.getByType('dimensions').filter((c) => c.resizing !== undefined)
+    for (const c of resize) changes.remove(c)
+    setNodes((nds) => {
+      if (!nds) return nds
+      const next = changes.applyTo(nds)
+      if (!resize.length) return next
+      return next.map((n) => {
+        const c = resize.find((r) => r.id === n.id)
+        if (!c) return n
+        return { ...n, resizing: c.resizing, width: c.setAttributes && c.dimensions ? c.dimensions.width : n.width }
+      })
+    })
   }, [])
   const onEdgesChange: OnEdgesChange<ArrowFlowEdge> = useCallback((changes) => {
     for (const c of changes.getByType('remove')) changes.remove(c)
