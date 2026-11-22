@@ -1,5 +1,5 @@
-import { memo, useContext } from 'react'
-import { Handle, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
+import { memo, useContext, useRef } from 'react'
+import { Handle, NodeResizeControl, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
 import { NOTE_COLORS } from '@chart/shared'
 import { clearJournal, journalNoteHtml } from '../db/noteJournal'
 import { updateNote } from '../db/repo'
@@ -8,6 +8,7 @@ import { CanvasContext } from './CanvasContext'
 import type { Side } from './edgeGeometry'
 import type { NoteFlowNode } from './flowMapping'
 import { NoteBody } from './NoteBody'
+import { MAX_NOTE_WIDTH, MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH } from '@chart/shared'
 import { NoteEditor } from './NoteEditor'
 import { NotePalette } from './NotePalette'
 
@@ -24,6 +25,12 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
   const { note } = data
   const ctx = useContext(CanvasContext)
   const editing = ctx.editingId === note.id
+  const startHeight = useRef(0)
+  // The height counts as changed only when the handle really moved it (a width-only drag keeps it).
+  const sizeOf = (p: { width: number; height: number }) => ({
+    width: p.width,
+    height: Math.abs(p.height - startHeight.current) < 1 ? null : p.height,
+  })
   return (
     <div
       className={cls(
@@ -34,7 +41,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
       )}
       data-testid="note"
       data-color={note.color}
-      style={{ background: NOTE_COLORS[note.color] }}
+      style={{ background: NOTE_COLORS[note.color], minHeight: note.height }}
       onPointerDown={ctx.tool === 'arrow' ? (e) => ctx.startArrow(note.id, e) : undefined}
     >
       {/* Arrows are drawn from note geometry, but React Flow still expects a handle on each end. */}
@@ -62,6 +69,22 @@ export const NoteNode = memo(function NoteNode({ data, selected }: NodeProps<Not
         />
       ) : (
         <NoteBody html={note.html} />
+      )}
+      {selected && !editing && ctx.tool === 'select' && (
+        <NodeResizeControl
+          className="note-resize nodrag nopan"
+          position="bottom-right"
+          minWidth={MIN_NOTE_WIDTH}
+          maxWidth={MAX_NOTE_WIDTH}
+          minHeight={MIN_NOTE_HEIGHT}
+          onResizeStart={(_e, p) => (startHeight.current = p.height)}
+          onResize={(_e, p) => ctx.resizing(note.id, sizeOf(p))}
+          onResizeEnd={(_e, p) => ctx.resized(note.id, sizeOf(p))}
+        >
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M9 3 3 9M9 6.5 6.5 9" />
+          </svg>
+        </NodeResizeControl>
       )}
       {ctx.tool === 'select' &&
         !editing &&

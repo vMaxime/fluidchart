@@ -12,12 +12,15 @@ export function mergeNodes(notes: Note[], current: NoteFlowNode[]): NoteFlowNode
   const byId = new Map(current.map((n) => [n.id, n]))
   return notes.map((note) => {
     const prev = byId.get(note.id)
+    // While being resized the node keeps its live size (the db still holds the old one).
+    const live = prev?.resizing ? prev : undefined
     return {
       id: note.id,
       type: 'note',
       position: prev?.dragging ? prev.position : { x: note.x, y: note.y },
-      width: note.width,
-      data: { note },
+      width: live?.width ?? note.width,
+      data: live ? live.data : { note },
+      resizing: prev?.resizing,
       selected: prev?.selected ?? false,
       measured: prev?.measured,
       dragging: prev?.dragging,

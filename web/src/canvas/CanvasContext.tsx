@@ -23,6 +23,10 @@ export const CanvasContext = createContext<{
    */
   stopEditing(finalHtml?: string, id?: Id): void
   recolor(id: Id, color: NoteColor): void
+  /** Live size while the corner handle is dragged; `height: null` = the height was not touched. */
+  resizing(id: Id, size: { width: number; height: number | null }): void
+  /** The handle was released: saves the size (one undo step). */
+  resized(id: Id, size: { width: number; height: number | null }): void
   recolorArrow(id: Id, color: ArrowColor): void
   startArrow(id: Id, e: ReactPointerEvent): void
   /** Press on a + knob: tap grows a connected note on that side, drag connects or grows where dropped. */
@@ -39,6 +43,8 @@ export const CanvasContext = createContext<{
   startEditing() {},
   stopEditing() {},
   recolor() {},
+  resizing() {},
+  resized() {},
   recolorArrow() {},
   startArrow() {},
   startKnob() {},

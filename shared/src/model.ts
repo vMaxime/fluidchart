@@ -35,6 +35,10 @@ export interface Arrow extends Entity {
 }
 
 export const DEFAULT_NOTE_WIDTH = 200
+export const MIN_NOTE_WIDTH = 120
+export const MAX_NOTE_WIDTH = 800
+/** Smallest minimum height; a height at or under it means "automatic". */
+export const MIN_NOTE_HEIGHT = 64
 export const UNTITLED_BOARD = 'Sans titre'
 
 export function normalizeBoardName(name: string): string {
