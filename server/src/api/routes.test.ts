@@ -299,3 +299,53 @@ it('arrows keep their colour; without one they are gray', async () => {
   ).json()) as Detail
   expect(body.arrows.map((a) => a.color)).toEqual(['red', 'gray'])
 })
+
+it('note width up to 800 and a minimum height are kept and returned; no height gives none', async () => {
+  const app = make()
+  const body = (await (
+    await post(app, {
+      name: 'Tailles',
+      notes: [
+        { id: 'a', html: 'A', x: 0, y: 0, width: 800, height: 300 },
+        { id: 'b', html: 'B', x: 0, y: 500 },
+      ],
+    })
+  ).json()) as Detail
+  const [a, b] = body.notes as (Detail['notes'][number] & { height?: number })[]
+  expect(a).toMatchObject({ width: 800, height: 300 })
+  expect('height' in b).toBe(false)
+  // GET → POST gives the same sizes.
+  const again = (await (await post(app, body)).json()) as Detail
+  expect(again.notes.map((n) => [n.width, (n as { height?: number }).height])).toEqual([
+    [800, 300],
+    [200, undefined],
+  ])
+})
+
+it('a height under 64 or over 5000, or a width over 800, is refused with its path', async () => {
+  for (const [patch, path] of [
+    [{ height: 63 }, 'notes.0.height'],
+    [{ height: 5001 }, 'notes.0.height'],
+    [{ width: 801 }, 'notes.0.width'],
+  ] as const) {
+    const res = await post(make(), { name: 'X', notes: [{ id: 'a', html: 'A', ...patch }] })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { issues: { path: string }[] }).issues.map((i) => i.path)).toContain(path)
+  }
+})
+
+it('auto layout leaves room under a note given a tall minimum height', async () => {
+  const body = (await (
+    await post(make(), {
+      name: 'Haute',
+      notes: [
+        { id: 'parent', html: 'P', height: 600 },
+        { id: 'enfant', html: 'E' },
+      ],
+      arrows: [{ from: 'parent', to: 'enfant' }],
+    })
+  ).json()) as Detail
+  const parent = body.notes.find((n) => n.html === '<p>P</p>')!
+  const enfant = body.notes.find((n) => n.html === '<p>E</p>')!
+  expect(enfant.y).toBeGreaterThanOrEqual(parent.y + 600)
+})

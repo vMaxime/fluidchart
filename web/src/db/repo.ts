@@ -155,7 +155,7 @@ export async function addNote(boardId: Id, pos: { x: number; y: number }, color:
 
 export async function updateNote(
   id: Id,
-  patch: Partial<Pick<Note, 'x' | 'y' | 'width' | 'color' | 'html'>>,
+  patch: Partial<Pick<Note, 'x' | 'y' | 'width' | 'height' | 'color' | 'html'>>,
 ): Promise<void> {
   await db.transaction('rw', db.notes, async () => {
     const row = await db.notes.get(id)

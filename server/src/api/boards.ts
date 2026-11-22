@@ -47,7 +47,7 @@ export type BoardDetail = {
   /** Opens the board in the web app. */
   url: string
   /** Sorted top to bottom, then left to right. */
-  notes: { id: string; html: string; color: NoteColor; x: number; y: number; width: number }[]
+  notes: { id: string; html: string; color: NoteColor; x: number; y: number; width: number; height?: number }[]
   arrows: { from: string; to: string; color: ArrowColor }[]
 }
 
@@ -74,7 +74,15 @@ export function readBoard(db: DatabaseSync, id: string, origin: string): BoardDe
     name: board.name,
     updatedAt: Math.max(board.updatedAt, lastChild.t ?? 0),
     url: `${origin}/b/${board.id}`,
-    notes: notes.map(({ id, html, color, x, y, width }) => ({ id, html, color, x, y, width })),
+    notes: notes.map(({ id, html, color, x, y, width, height }) => ({
+      id,
+      html,
+      color,
+      x,
+      y,
+      width,
+      ...(height !== undefined && { height }),
+    })),
     // An arrow whose note is gone would make this output an invalid POST body. Sorted by their
     // notes' order, so reading the same board always gives the same output.
     arrows: (live(db, 'arrow', id) as Arrow[])
@@ -101,13 +109,18 @@ export function createBoard(db: DatabaseSync, input: BoardInput, now: number, or
   const at = placed
     ? null
     : layoutNotes(
-        input.notes.map((n, i) => ({ id: n.id, width: n.width, height: estimateNoteHeight(html[i], n.width) })),
+        input.notes.map((n, i) => ({
+          id: n.id,
+          width: n.width,
+          height: Math.max(estimateNoteHeight(html[i], n.width), n.height ?? 0),
+        })),
         arrows,
       )
   const notes: Note[] = input.notes.map((n, i) => ({
     ...newNote(board.id, at?.get(n.id) ?? { x: n.x!, y: n.y! }, n.color, now),
     id: ids.get(n.id)!,
     width: n.width,
+    ...(n.height !== undefined && { height: n.height }),
     html: html[i],
   }))
   const arrowRows: Arrow[] = arrows.map((a) => ({

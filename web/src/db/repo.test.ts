@@ -162,3 +162,15 @@ it('updateArrow sets the colour, marked dirty with a newer updatedAt', async () 
   expect(await db.arrows.get(a.id)).toMatchObject({ color: 'red', dirty: 1 })
   expect((await db.arrows.get(a.id))!.updatedAt).toBeGreaterThan(a.updatedAt)
 })
+
+it('updateNote sets then clears the minimum height', async () => {
+  const b = await repo.createBoard('A')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await db.notes.update(n.id, { dirty: 0 })
+  await repo.updateNote(n.id, { width: 320, height: 180 })
+  expect(await db.notes.get(n.id)).toMatchObject({ width: 320, height: 180, dirty: 1 })
+  await repo.updateNote(n.id, { height: undefined })
+  const row = (await db.notes.get(n.id))!
+  expect(row.height).toBeUndefined()
+  expect(row.width).toBe(320)
+})

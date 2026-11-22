@@ -20,6 +20,8 @@ export interface Note extends Entity {
   x: number
   y: number
   width: number
+  /** Minimum height in px; absent = automatic (the height follows the text). */
+  height?: number
   color: NoteColor
   html: string
 }

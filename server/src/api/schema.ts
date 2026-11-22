@@ -39,12 +39,11 @@ export const NoteInputSchema = z.object({
   color: z.enum(NOTE_COLORS).default('yellow').meta({ description: 'Couleur du post-it.' }),
   x: coordinate('horizontale (vers la droite)'),
   y: coordinate('verticale (vers le bas)'),
-  width: z
-    .number()
-    .min(120)
-    .max(600)
-    .default(DEFAULT_NOTE_WIDTH)
-    .meta({ description: 'Largeur en px ; la hauteur suit le texte.' }),
+  width: z.number().min(120).max(800).default(DEFAULT_NOTE_WIDTH).meta({ description: 'Largeur en px.' }),
+  height: z.number().min(64).max(5000).optional().meta({
+    description:
+      "Hauteur minimale en px (facultatif). Sans elle, la hauteur suit le texte ; avec elle, le post-it est au moins aussi haut, et plus si le texte l'exige.",
+  }),
 })
 
 export const ArrowInputSchema = z.object({
@@ -122,6 +121,7 @@ export const BoardDetailSchema = z.object({
       x: z.number(),
       y: z.number(),
       width: z.number(),
+      height: z.number().optional(),
     }),
   ),
   arrows: z.array(z.object({ from: z.string(), to: z.string(), color: z.enum(ARROW_COLORS) })),
