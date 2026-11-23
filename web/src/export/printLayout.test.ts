@@ -1,5 +1,17 @@
 import { it, expect } from 'vitest'
-import { a4Area, boardBounds, intersects, printerLayout, revisionPage, smallestTextPx } from './printLayout'
+import {
+  a4Area,
+  boardBounds,
+  intersects,
+  MIN_ZONE_SCALE,
+  printerLayout,
+  resizeZone,
+  revisionPage,
+  smallestTextPx,
+  turnZone,
+  zoneBox,
+  zoneTextPt,
+} from './printLayout'
 
 const MM = 96 / 25.4
 const OVERLAP = 10 * MM
@@ -81,4 +93,41 @@ it('intersects: boxes sharing area, not boxes merely touching or apart', () => {
   expect(intersects(a, { x: 100, y: 0, width: 50, height: 50 })).toBe(false)
   expect(intersects(a, { x: -200, y: 0, width: 50, height: 50 })).toBe(false)
   expect(intersects(a, { x: 10, y: 10, width: 5, height: 5 })).toBe(true)
+})
+
+it('zoneBox: the A4 frame covers more board the smaller its scale', () => {
+  expect(zoneBox({ x: 10, y: 20, orientation: 'portrait', scale: 1 })).toEqual({ x: 10, y: 20, ...a4Area('portrait') })
+  const half = zoneBox({ x: 0, y: 0, orientation: 'landscape', scale: 0.5 })
+  expect(half.width).toBeCloseTo(2 * 277 * MM, 9)
+  expect(half.height).toBeCloseTo(2 * 182 * MM, 9)
+})
+
+it('turnZone keeps the centre and the scale; turning back restores the zone', () => {
+  const z = { x: 100, y: 200, orientation: 'portrait' as const, scale: 0.5 }
+  const t = turnZone(z, 'landscape')
+  const [a, b] = [zoneBox(z), zoneBox(t)]
+  expect(t.scale).toBe(0.5)
+  expect(b.x + b.width / 2).toBeCloseTo(a.x + a.width / 2, 9)
+  expect(b.y + b.height / 2).toBeCloseTo(a.y + a.height / 2, 9)
+  expect(b.width).toBeGreaterThan(b.height)
+  const back = turnZone(t, 'portrait')
+  expect(back.x).toBeCloseTo(z.x, 9)
+  expect(back.y).toBeCloseTo(z.y, 9)
+  expect(turnZone(z, 'portrait')).toBe(z)
+})
+
+it('resizeZone: the corner moves, the top-left stays; the scale never goes above 1 nor under the minimum', () => {
+  const z = { x: 5, y: 6, orientation: 'portrait' as const, scale: 1 }
+  const wide = resizeZone(z, 2 * 190 * MM)
+  expect(wide).toMatchObject({ x: 5, y: 6, orientation: 'portrait' })
+  expect(wide.scale).toBeCloseTo(0.5, 9)
+  expect(resizeZone(z, 10).scale).toBe(1)
+  expect(resizeZone(z, 1e9).scale).toBe(MIN_ZONE_SCALE)
+})
+
+it('zoneTextPt: the smallest text on paper, in pt (14px at real size is 10.5pt)', () => {
+  const z = { x: 0, y: 0, orientation: 'portrait' as const, scale: 1 }
+  expect(zoneTextPt(['<p>x</p>'], z)).toBeCloseTo(10.5, 9)
+  expect(zoneTextPt(['<p>x</p>'], { ...z, scale: 0.5 })).toBeCloseTo(5.25, 9)
+  expect(zoneTextPt(['<span style="font-size: 12px">x</span>'], z)).toBeCloseTo(9, 9)
 })

@@ -232,7 +232,7 @@ test('after dragging the handle up on a tall note, the printed box still holds i
 
 test.describe('zone A4', () => {
   const zoneFrame = (page: Page) => page.getByTestId('export-zone')
-  async function bigBoard(page: Page, request: Parameters<Parameters<typeof test>[2]>[0]['request']) {
+  async function bigBoard(page: Page, request: Parameters<Parameters<typeof test>[2]>[0]['request'], count = 2) {
     const res = await request.post('/api/v1/boards', {
       headers: { Authorization: `Bearer ${TOKEN}` },
       data: {
@@ -240,18 +240,28 @@ test.describe('zone A4', () => {
         notes: [
           { id: 'a', html: 'Anémie', x: 0, y: 0 },
           { id: 'b', html: 'Ferritine', x: 1800, y: 0 },
-        ],
-        arrows: [{ from: 'a', to: 'b' }],
+        ].slice(0, count),
+        arrows: count === 2 ? [{ from: 'a', to: 'b' }] : [],
       },
     })
     const { id } = (await res.json()) as { id: string }
     await page.goto(`/b/${id}`)
-    await expect(notes(page)).toHaveCount(2)
+    await expect(notes(page)).toHaveCount(count)
   }
   const chooseZone = async (page: Page) => {
     await page.getByRole('button', { name: 'Exporter en PDF' }).click()
     await page.getByRole('menuitem', { name: /Une zone A4/ }).click()
     await expect(zoneFrame(page)).toBeVisible()
+    // The view zooms to show the frame: wait until it stops moving.
+    let last = ''
+    await expect
+      .poll(async () => {
+        const now = JSON.stringify(await zoneFrame(page).boundingBox())
+        const settled = now === last
+        last = now
+        return settled
+      })
+      .toBe(true)
   }
   /** Drags the frame so its centre lands on the given point. */
   const dragZoneTo = async (page: Page, to: { x: number; y: number }) => {
@@ -274,7 +284,7 @@ test.describe('zone A4', () => {
     expect(box.height / box.width).toBeCloseTo(269 / 190, 1)
 
     // Over the second note, which was not under the frame to begin with.
-    const note = notes(page).nth(1)
+    const note = notes(page).filter({ hasText: 'Ferritine' })
     await expect(note).toBeVisible()
     const before = await zoneFrame(page).boundingBox()
     await dragZoneTo(page, await center(note))
@@ -295,6 +305,7 @@ test.describe('zone A4', () => {
       )
       return [...el.querySelectorAll<HTMLElement>('.print-note')].map((n) => parseFloat(n.style.left) + tx)
     })
+    shown.sort((p, q) => p - q) // the notes come in no particular order
     expect(shown[0]).toBeLessThan(0)
     expect(shown[1]).toBeGreaterThan(0)
     expect(shown[1]).toBeLessThan((190 * 96) / 25.4)
@@ -329,5 +340,34 @@ test.describe('zone A4', () => {
     await expect(zoneFrame(page)).toHaveCount(0)
     await expect(page.getByRole('toolbar', { name: 'Exporter une zone A4' })).toHaveCount(0)
     expect(await prints(page)).toBe(1)
+  })
+
+  test('dragging the corner makes the zone cover more board, printed smaller; the text size is shown', async ({
+    page,
+    request,
+  }) => {
+    await bigBoard(page, request, 1)
+    await chooseZone(page)
+    const hint = page.locator('.zone-text')
+    await expect(hint).toHaveText('Texte le plus petit : 10,5 pt')
+    const before = (await zoneFrame(page).boundingBox())!
+
+    const handle = await center(page.locator('.zone-handle'))
+    await page.mouse.move(handle.x, handle.y)
+    await page.mouse.down()
+    await page.mouse.move(handle.x + 200, handle.y + 200, { steps: 10 })
+    await page.mouse.up()
+    const after = (await zoneFrame(page).boundingBox())!
+    expect(after.width).toBeGreaterThan(before.width + 100)
+    expect(after.height / after.width).toBeCloseTo(269 / 190, 1) // still an A4 page
+    expect(after.x).toBeCloseTo(before.x, 0) // the top-left corner stays
+    await expect(hint).not.toHaveText('Texte le plus petit : 10,5 pt')
+
+    await page.getByRole('button', { name: 'Exporter cette zone' }).click()
+    await expect.poll(() => prints(page)).toBe(1)
+    const transform = await page.locator('.print-root .print-board').evaluate((el: HTMLElement) => el.style.transform)
+    const scale = Number(/scale\(([\d.]+)\)/.exec(transform)![1])
+    expect(scale).toBeLessThan(1)
+    expect(scale).toBeCloseTo(before.width / after.width, 1)
   })
 })

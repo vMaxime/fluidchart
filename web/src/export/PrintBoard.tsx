@@ -9,14 +9,13 @@ import {
   revisionPage,
   smallestTextPx,
   type Box,
-  type Orientation,
+  type ExportZone,
 } from './printLayout'
 import './print.css'
 
 export type PrintNote = { note: Note; height: number }
 export type PrintFormat = 'revision' | 'printer'
-/** One A4 page chosen on the canvas: its top-left corner, in board coordinates. */
-export type ExportZone = { x: number; y: number; orientation: Orientation }
+export type { ExportZone }
 
 const MM = 96 / 25.4
 const FOOTER = 8 * MM
@@ -134,14 +133,16 @@ export function PrintBoard({
   const bounds = boundsOf(notes)
   const drawing = <Drawing notes={notes} arrows={arrows} bounds={bounds} />
   if (zone) {
-    // One A4 page at real size, showing what lies inside the zone (the board is cut at its edges).
+    // One A4 page showing what lies inside the zone (the board is cut at its edges).
     const area = a4Area(zone.orientation)
     return (
       <div className="print-page print-a4" style={{ width: area.width, height: area.height + FOOTER - SAFETY }}>
         <div className="print-tile" style={{ width: area.width, height: area.height }}>
           <div
             className="print-board"
-            style={{ transform: `translate(${bounds.x - zone.x}px, ${bounds.y - zone.y}px)` }}
+            style={{
+              transform: `translate(${(bounds.x - zone.x) * zone.scale}px, ${(bounds.y - zone.y) * zone.scale}px) scale(${zone.scale})`,
+            }}
           >
             {drawing}
           </div>
