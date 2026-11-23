@@ -47,6 +47,17 @@ const ACTIONS = [
     shortcut: '⇧⌘Z',
     icon: <path className="stroke" d="M13 6l3 3-3 3M16 9H9a4 4 0 0 0 0 8h2" />,
   },
+  {
+    key: 'duplicate',
+    label: 'Dupliquer',
+    shortcut: '⌘D',
+    icon: (
+      <>
+        <rect className="stroke" x="7" y="7" width="9" height="9" rx="1.5" />
+        <path className="stroke" d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" />
+      </>
+    ),
+  },
 ] as const
 
 export function ToolBar(props: {
@@ -56,6 +67,8 @@ export function ToolBar(props: {
   canRedo: boolean
   onUndo(): void
   onRedo(): void
+  canDuplicate: boolean
+  onDuplicate(): void
 }) {
   const { tool, onChange } = props
   const [tip, setTip] = useState<{ index: number; instant: boolean } | null>(null)
@@ -123,20 +136,22 @@ export function ToolBar(props: {
       <span className="toolbar-sep" aria-hidden="true" />
       {ACTIONS.map((a, j) => {
         const i = TOOLS.length + j
-        const enabled = a.key === 'undo' ? props.canUndo : props.canRedo
+        const enabled = { undo: props.canUndo, redo: props.canRedo, duplicate: props.canDuplicate }[a.key]
+        const onClick = { undo: props.onUndo, redo: props.onRedo, duplicate: props.onDuplicate }[a.key]
+        const shortcut = { undo: 'Meta+Z', redo: 'Meta+Shift+Z', duplicate: 'Meta+D' }[a.key]
         return (
           <div key={a.key} className="toolbar-slot">
             <button
               className="toolbar-btn"
               aria-label={a.label}
-              aria-keyshortcuts={a.key === 'undo' ? 'Meta+Z' : 'Meta+Shift+Z'}
+              aria-keyshortcuts={shortcut}
               aria-describedby={tip?.index === i ? `tool-tip-${a.key}` : undefined}
               disabled={!enabled}
               onPointerEnter={() => show(i)}
               onPointerLeave={hide}
               onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(i)}
               onBlur={hide}
-              onClick={a.key === 'undo' ? props.onUndo : props.onRedo}
+              onClick={onClick}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true">
                 {a.icon}

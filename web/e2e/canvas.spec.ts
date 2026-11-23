@@ -442,3 +442,129 @@ test('with several notes selected there is no resize handle', async ({ page }) =
   await expect(page.locator('.react-flow__node.selected')).toHaveCount(2)
   await expect(resizeHandle(page)).toHaveCount(0)
 })
+
+const duplicateButton = (page: Page) => page.getByRole('button', { name: 'Dupliquer' })
+
+test('⌘D duplicates the selected note: copy is selected, one undo step, redo brings it back', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await byColor(page, 'yellow').click()
+  await page.keyboard.press('ControlOrMeta+d')
+  await expect(notes(page)).toHaveCount(2)
+  await expect(notes(page).filter({ hasText: 'Insuline' })).toHaveCount(2)
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1)
+  const [a, b] = await Promise.all([notes(page).nth(0).boundingBox(), notes(page).nth(1).boundingBox()])
+  expect(Math.abs(a!.x - b!.x) + Math.abs(a!.y - b!.y)).toBeGreaterThan(20)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(notes(page)).toHaveCount(1)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(notes(page)).toHaveCount(2)
+  await expect
+    .poll(async () => (await storedNotes(page)).filter((n) => !(n as { deleted?: boolean }).deleted).length)
+    .toBe(2)
+})
+
+test('the Dupliquer button needs a selection; ⌘D while writing does not duplicate', async ({ page }) => {
+  await newBoard(page)
+  await expect(duplicateButton(page)).toBeDisabled()
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+d')
+  await expect(notes(page)).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await notes(page).first().click()
+  await expect(duplicateButton(page)).toBeEnabled()
+  await duplicateButton(page).click()
+  await expect(notes(page)).toHaveCount(2)
+})
+
+test('duplicating two connected notes copies their arrow too', async ({ page }) => {
+  await newBoard(page)
+  await createNote(page, { x: 250, y: 200 })
+  await createNote(page, { x: 650, y: 200 })
+  await drawArrow(page, notes(page).nth(0), notes(page).nth(1))
+  await page.mouse.move(150, 120)
+  await page.mouse.down()
+  await page.mouse.move(950, 420, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2)
+  await page.keyboard.press('ControlOrMeta+d')
+  await expect(notes(page)).toHaveCount(4)
+  await expect(page.locator('.react-flow__edge path.arrow')).toHaveCount(2)
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2)
+})
+
+// The clipboard is exercised with synthetic events: no permission prompt, same code path as ⌘C / ⌘V.
+const pasteText = (page: Page, text: string) =>
+  page.evaluate((t) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', t)
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, text)
+const copyEvent = (page: Page) =>
+  page.evaluate(() => {
+    const data = new DataTransfer()
+    const e = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true })
+    document.body.dispatchEvent(e)
+    return { text: data.getData('text/plain'), html: data.getData('text/html'), prevented: e.defaultPrevented }
+  })
+
+test('copying a selected note puts its whole text on the clipboard', async ({ page }) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.type('Insuline')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Hormone hypoglycémiante')
+  await page.keyboard.press('Escape')
+  await expect(editor(page)).toHaveCount(0)
+  await notes(page).first().click()
+  const copied = await copyEvent(page)
+  expect(copied).toMatchObject({ text: 'Insuline\nHormone hypoglycémiante', prevented: true })
+  expect(copied.html).toContain('Hormone hypoglycémiante')
+  // Nothing selected: the event is left alone.
+  await page.locator('.react-flow__pane').click({ position: { x: 700, y: 450 } })
+  expect((await copyEvent(page)).prevented).toBe(false)
+})
+
+test('pasting with nothing focused makes a note in the middle of the view, selected, one undo step', async ({
+  page,
+}) => {
+  await newBoard(page)
+  await page.locator('.react-flow__pane').click({ position: { x: 700, y: 450 } }) // focus on nothing
+  await pasteText(page, 'Ferritine basse\nCarence martiale')
+  await expect(notes(page)).toHaveCount(1)
+  await expect(notes(page).first()).toContainText('Carence martiale')
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1)
+  const box = (await notes(page).first().boundingBox())!
+  const flow = (await page.locator('.board-flow').boundingBox())!
+  expect(Math.abs(box.x + box.width / 2 - (flow.x + flow.width / 2))).toBeLessThan(40)
+  expect(Math.abs(box.y + box.height / 2 - (flow.y + flow.height / 2))).toBeLessThan(80)
+  // Pasting again does not stack the new note exactly on the first one.
+  await pasteText(page, 'Deuxième')
+  await expect(notes(page)).toHaveCount(2)
+  const [a, b] = await Promise.all([notes(page).nth(0).boundingBox(), notes(page).nth(1).boundingBox()])
+  expect(Math.abs(a!.x - b!.x) + Math.abs(a!.y - b!.y)).toBeGreaterThan(20)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(notes(page)).toHaveCount(1)
+})
+
+test('paste while writing in a note, or an empty paste, makes no note', async ({ page }) => {
+  await newBoard(page)
+  await pasteText(page, '   ')
+  await expect(notes(page)).toHaveCount(0)
+  await page.locator('.react-flow__pane').dblclick({ position: { x: 300, y: 200 } })
+  await expect(editor(page)).toBeFocused()
+  await editor(page).evaluate((el, t) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', t)
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, 'dans la note')
+  await page.keyboard.press('Escape')
+  await expect(notes(page)).toHaveCount(1)
+})

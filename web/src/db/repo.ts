@@ -147,10 +147,56 @@ export async function listArrows(boardId: Id): Promise<Arrow[]> {
   return rows.map(strip)
 }
 
-export async function addNote(boardId: Id, pos: { x: number; y: number }, color: NoteColor): Promise<Note> {
-  const note = newNote(boardId, pos, color, Date.now())
+export async function addNote(
+  boardId: Id,
+  pos: { x: number; y: number },
+  color: NoteColor,
+  html?: string,
+): Promise<Note> {
+  const note = { ...newNote(boardId, pos, color, Date.now()), ...(html !== undefined && { html }) }
   await db.notes.add({ ...note, dirty: 1 })
   return note
+}
+
+/** A copy lands this far down and right of its original, so it reads as a copy. */
+export const DUPLICATE_OFFSET = 32
+
+/**
+ * Copies live notes (text, colour, size) beside the originals, and the live arrows that join two
+ * of the copied notes. Unknown or deleted ids are skipped. Returns the new rows, in the order of `ids`.
+ */
+export async function duplicateNotes(ids: Id[]): Promise<{ notes: Note[]; arrows: Arrow[] }> {
+  if (ids.length === 0) return { notes: [], arrows: [] }
+  return db.transaction('rw', db.notes, db.arrows, async () => {
+    const found = await db.notes.bulkGet(ids)
+    const originals = found.filter((n): n is NonNullable<typeof n> => !!n && !n.deleted)
+    const at = Date.now()
+    const copyOf = new Map<Id, Id>()
+    const notes: Note[] = originals.map(({ dirty: _dirty, ...n }) => {
+      const id = crypto.randomUUID()
+      copyOf.set(n.id, id)
+      return { ...n, id, x: n.x + DUPLICATE_OFFSET, y: n.y + DUPLICATE_OFFSET, updatedAt: at, deleted: false }
+    })
+    const arrows: Arrow[] = []
+    if (copyOf.size > 1) {
+      const rows = await db.arrows
+        .where('from')
+        .anyOf([...copyOf.keys()])
+        .toArray()
+      for (const { dirty: _dirty, ...a } of rows)
+        if (!a.deleted && copyOf.has(a.to))
+          arrows.push({
+            ...a,
+            id: crypto.randomUUID(),
+            from: copyOf.get(a.from)!,
+            to: copyOf.get(a.to)!,
+            updatedAt: at,
+          })
+    }
+    await db.notes.bulkAdd(notes.map((n) => ({ ...n, dirty: 1 as const })))
+    await db.arrows.bulkAdd(arrows.map((a) => ({ ...a, dirty: 1 as const })))
+    return { notes, arrows }
+  })
 }
 
 export async function updateNote(
