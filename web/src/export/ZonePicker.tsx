@@ -1,22 +1,14 @@
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ViewportPortal, useReactFlow, useViewport } from '@xyflow/react'
-import { a4Area, intersects, type Box, type Orientation } from './printLayout'
-import type { ExportZone } from './PrintBoard'
+import type { Note } from '@chart/shared'
+import { intersects, resizeZone, turnZone, zoneBox, zoneTextPt, type ExportZone } from './printLayout'
 
 const KEY_STEP = 16
 const KEY_STEP_BIG = 80
-
-/** The A4 frame, in board coordinates, for a zone. */
-export const zoneBox = (zone: ExportZone): Box => ({ x: zone.x, y: zone.y, ...a4Area(zone.orientation) })
-
-/** The same page turned the other way, around the same centre. */
-export function turnZone(zone: ExportZone, orientation: Orientation): ExportZone {
-  if (orientation === zone.orientation) return zone
-  const from = a4Area(zone.orientation)
-  const to = a4Area(orientation)
-  return { x: zone.x + (from.width - to.width) / 2, y: zone.y + (from.height - to.height) / 2, orientation }
-}
+/** Smallest text that stays comfortable to read on paper. */
+const READABLE_PT = 8
+const frenchNumber = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 })
 
 /**
  * « Exporter une zone A4 »: a page-shaped frame laid over the board, to drag onto the part to
@@ -36,8 +28,8 @@ export function ZonePicker({
   const { getNodes } = useReactFlow()
   const { zoom } = useViewport()
   const frame = zoneBox(zone)
-  const drag = useRef<{ x: number; y: number; zone: ExportZone } | null>(null)
-  const covered = getNodes().some((n) =>
+  const drag = useRef<{ x: number; y: number; zone: ExportZone; resize: boolean } | null>(null)
+  const inside = getNodes().filter((n) =>
     intersects(frame, {
       x: n.position.x,
       y: n.position.y,
@@ -45,16 +37,25 @@ export function ZonePicker({
       height: n.measured?.height ?? 64,
     }),
   )
+  const covered = inside.length > 0
+  const textPt = zoneTextPt(
+    inside.map((n) => (n.data as { note: Note }).note.html),
+    zone,
+  )
 
+  // Pressing the frame moves it; pressing its corner handle resizes it.
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { x: e.clientX, y: e.clientY, zone }
+    const resize = e.target instanceof HTMLElement && e.target.classList.contains('zone-handle')
+    drag.current = { x: e.clientX, y: e.clientY, zone, resize }
   }
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     if (!d) return
-    onChange({ ...d.zone, x: d.zone.x + (e.clientX - d.x) / zoom, y: d.zone.y + (e.clientY - d.y) / zoom })
+    const [dx, dy] = [(e.clientX - d.x) / zoom, (e.clientY - d.y) / zoom]
+    if (d.resize) onChange(resizeZone(d.zone, zoneBox(d.zone).width + Math.max(dx, dy * a4Ratio(d.zone))))
+    else onChange({ ...d.zone, x: d.zone.x + dx, y: d.zone.y + dy })
   }
   const onPointerUp = () => {
     drag.current = null
@@ -66,6 +67,11 @@ export function ZonePicker({
       ArrowRight: [step, 0],
       ArrowUp: [0, -step],
       ArrowDown: [0, step],
+    }
+    if (e.key === '+' || e.key === '-' || e.key === '=') {
+      e.preventDefault()
+      onChange(resizeZone(zone, frame.width * (e.key === '-' ? 1.1 : 1 / 1.1)))
+      return
     }
     const by = move[e.key]
     if (!by) return
@@ -82,6 +88,7 @@ export function ZonePicker({
           aria-label="Zone de la page A4"
           tabIndex={0}
           data-testid="export-zone"
+          aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown + -"
           style={{
             left: frame.x,
             top: frame.y,
@@ -94,11 +101,18 @@ export function ZonePicker({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onKeyDown={onKeyDown}
-        />
+        >
+          <span className="zone-handle" style={{ width: 16 / zoom, height: 16 / zoom, borderWidth: 2 / zoom }} />
+        </div>
       </ViewportPortal>
       {createPortal(
         <div className="zone-bar" role="toolbar" aria-label="Exporter une zone A4">
-          <span className="zone-hint">Déplace la zone sur la partie à exporter</span>
+          <span className="zone-hint">
+            Déplace la zone, agrandis-la par son coin
+            <span className={textPt < READABLE_PT ? 'zone-text zone-text-small' : 'zone-text'}>
+              Texte le plus petit : {frenchNumber.format(textPt)} pt
+            </span>
+          </span>
           <span className="zone-turn" role="group" aria-label="Orientation">
             {(['portrait', 'landscape'] as const).map((o) => (
               <button key={o} aria-pressed={zone.orientation === o} onClick={() => onChange(turnZone(zone, o))}>
@@ -120,4 +134,10 @@ export function ZonePicker({
       )}
     </>
   )
+}
+
+/** Height of a frame for each unit of width: the A4 ratio of its orientation. */
+const a4Ratio = (zone: ExportZone) => {
+  const { width, height } = zoneBox({ ...zone, scale: 1 })
+  return width / height
 }

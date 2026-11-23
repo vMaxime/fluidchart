@@ -6,7 +6,7 @@ import type { Arrow, Id } from '@chart/shared'
 import { listArrows, listNotes } from '../db/repo'
 import { PrintBoard, pageRule, type ExportZone, type PrintFormat, type PrintNote } from './PrintBoard'
 import { ZonePicker } from './ZonePicker'
-import { a4Area } from './printLayout'
+import { zoneBox } from './printLayout'
 import { isTypingTarget } from '../canvas/keys'
 import './export.css'
 
@@ -62,13 +62,14 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     setOpen(false)
     const view = document.querySelector('.react-flow')?.getBoundingClientRect()
     if (!view) return
-    const area = a4Area('portrait')
+    const real: ExportZone = { x: 0, y: 0, orientation: 'portrait', scale: 1 }
+    const area = zoneBox(real)
     const c = screenToFlowPosition({ x: view.left + view.width / 2, y: view.top + view.height / 2 })
-    const start: ExportZone = { x: c.x - area.width / 2, y: c.y - area.height / 2, orientation: 'portrait' }
+    const start: ExportZone = { ...real, x: c.x - area.width / 2, y: c.y - area.height / 2 }
     setZone(start)
     const { zoom } = getViewport()
     if (area.width * zoom > view.width * 0.9 || area.height * zoom > view.height * 0.9)
-      void fitBounds({ ...start, ...area }, { padding: 0.12, duration: 200 })
+      void fitBounds({ ...area, x: start.x, y: start.y }, { padding: 0.18, duration: 200 })
   }
 
   const start = async (format: PrintFormat, chosen?: ExportZone) => {

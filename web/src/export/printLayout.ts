@@ -25,6 +25,46 @@ export function a4Area(orientation: 'portrait' | 'landscape'): { width: number; 
   return AREA[orientation]
 }
 
+export type Orientation = 'portrait' | 'landscape'
+
+/**
+ * One A4 page chosen on the canvas: the top-left corner of what it shows (board coordinates), its
+ * orientation, and its scale on paper (1 = real size; smaller shows more of the board).
+ */
+export type ExportZone = { x: number; y: number; orientation: Orientation; scale: number }
+/** A zone is never enlarged, and never shrunk past this (text would be unreadable anyway). */
+export const MIN_ZONE_SCALE = 0.2
+
+/** The part of the board a zone covers, in board px. */
+export function zoneBox(zone: ExportZone): Box {
+  const { width, height } = a4Area(zone.orientation)
+  return { x: zone.x, y: zone.y, width: width / zone.scale, height: height / zone.scale }
+}
+
+/** The same page turned the other way, around the same centre and at the same scale. */
+export function turnZone(zone: ExportZone, orientation: Orientation): ExportZone {
+  if (orientation === zone.orientation) return zone
+  const from = zoneBox(zone)
+  const turned = zoneBox({ ...zone, orientation })
+  return {
+    ...zone,
+    orientation,
+    x: from.x + (from.width - turned.width) / 2,
+    y: from.y + (from.height - turned.height) / 2,
+  }
+}
+
+/** The zone with its right edge at the given width (the top-left corner stays put). */
+export function resizeZone(zone: ExportZone, width: number): ExportZone {
+  const scale = a4Area(zone.orientation).width / Math.max(width, 1)
+  return { ...zone, scale: Math.min(1, Math.max(MIN_ZONE_SCALE, scale)) }
+}
+
+/** The smallest text of those notes once printed through this zone, in pt. */
+export function zoneTextPt(htmls: string[], zone: ExportZone): number {
+  return smallestTextPx(htmls) * zone.scale * 0.75
+}
+
 /** Do two boxes share some area? (Touching edges do not count.) */
 export function intersects(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
@@ -58,7 +98,6 @@ export function revisionPage(bounds: Box): { width: number; height: number; scal
   }
 }
 
-export type Orientation = 'portrait' | 'landscape'
 export type PrinterLayout = {
   orientation: Orientation
   scale: number
