@@ -2,11 +2,21 @@ import { getBezierPath } from '@xyflow/react'
 import { ARROW_COLOR_ORDER, ARROW_COLORS, DEFAULT_ARROW_COLOR, NOTE_COLORS, type Arrow, type Note } from '@chart/shared'
 import { NoteBody } from '../canvas/NoteBody'
 import { sideAnchors } from '../canvas/edgeGeometry'
-import { boardBounds, printerLayout, revisionPage, smallestTextPx, type Box } from './printLayout'
+import {
+  a4Area,
+  boardBounds,
+  printerLayout,
+  revisionPage,
+  smallestTextPx,
+  type Box,
+  type Orientation,
+} from './printLayout'
 import './print.css'
 
 export type PrintNote = { note: Note; height: number }
 export type PrintFormat = 'revision' | 'printer'
+/** One A4 page chosen on the canvas: its top-left corner, in board coordinates. */
+export type ExportZone = { x: number; y: number; orientation: Orientation }
 
 const MM = 96 / 25.4
 const FOOTER = 8 * MM
@@ -18,7 +28,8 @@ const rectOf = ({ note, height }: PrintNote): Box => ({ x: note.x, y: note.y, wi
 const boundsOf = (notes: PrintNote[]) => boardBounds(notes.map(rectOf))
 
 /** The @page rule for this export: the board's own size, or A4 in the orientation chosen. */
-export function pageRule(format: PrintFormat, notes: PrintNote[]): string {
+export function pageRule(format: PrintFormat, notes: PrintNote[], zone?: ExportZone): string {
+  if (zone) return `@page { size: A4 ${zone.orientation}; margin: 10mm }`
   const bounds = boundsOf(notes)
   if (format === 'revision') {
     const page = revisionPage(bounds)
@@ -112,14 +123,33 @@ export function PrintBoard({
   notes,
   arrows,
   format,
+  zone,
 }: {
   name: string
   notes: PrintNote[]
   arrows: Arrow[]
   format: PrintFormat
+  zone?: ExportZone
 }) {
   const bounds = boundsOf(notes)
   const drawing = <Drawing notes={notes} arrows={arrows} bounds={bounds} />
+  if (zone) {
+    // One A4 page at real size, showing what lies inside the zone (the board is cut at its edges).
+    const area = a4Area(zone.orientation)
+    return (
+      <div className="print-page print-a4" style={{ width: area.width, height: area.height + FOOTER - SAFETY }}>
+        <div className="print-tile" style={{ width: area.width, height: area.height }}>
+          <div
+            className="print-board"
+            style={{ transform: `translate(${bounds.x - zone.x}px, ${bounds.y - zone.y}px)` }}
+          >
+            {drawing}
+          </div>
+        </div>
+        <footer className="print-footer">{name}</footer>
+      </div>
+    )
+  }
   if (format === 'revision') {
     const page = revisionPage(bounds)
     return (

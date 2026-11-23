@@ -229,3 +229,105 @@ test('after dragging the handle up on a tall note, the printed box still holds i
     .evaluate((el: HTMLElement) => parseFloat(el.style.height))
   expect(printed).toBeGreaterThanOrEqual(Math.floor(tall.height))
 })
+
+test.describe('zone A4', () => {
+  const zoneFrame = (page: Page) => page.getByTestId('export-zone')
+  async function bigBoard(page: Page, request: Parameters<Parameters<typeof test>[2]>[0]['request']) {
+    const res = await request.post('/api/v1/boards', {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      data: {
+        name: 'Zone',
+        notes: [
+          { id: 'a', html: 'Anémie', x: 0, y: 0 },
+          { id: 'b', html: 'Ferritine', x: 1800, y: 0 },
+        ],
+        arrows: [{ from: 'a', to: 'b' }],
+      },
+    })
+    const { id } = (await res.json()) as { id: string }
+    await page.goto(`/b/${id}`)
+    await expect(notes(page)).toHaveCount(2)
+  }
+  const chooseZone = async (page: Page) => {
+    await page.getByRole('button', { name: 'Exporter en PDF' }).click()
+    await page.getByRole('menuitem', { name: /Une zone A4/ }).click()
+    await expect(zoneFrame(page)).toBeVisible()
+  }
+  /** Drags the frame so its centre lands on the given point. */
+  const dragZoneTo = async (page: Page, to: { x: number; y: number }) => {
+    const from = await center(zoneFrame(page))
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 10 })
+    await page.mouse.up()
+  }
+
+  test('drag the A4 frame onto a note, export: one real-size A4 page, then cleaned up', async ({
+    page,
+    request,
+    browserName,
+  }) => {
+    await bigBoard(page, request)
+    await chooseZone(page)
+    // The frame has the shape of a portrait A4 page.
+    const box = (await zoneFrame(page).boundingBox())!
+    expect(box.height / box.width).toBeCloseTo(269 / 190, 1)
+
+    // Over the second note, which was not under the frame to begin with.
+    const note = notes(page).nth(1)
+    await expect(note).toBeVisible()
+    const before = await zoneFrame(page).boundingBox()
+    await dragZoneTo(page, await center(note))
+    const after = (await zoneFrame(page).boundingBox())!
+    expect(after.x).not.toBeCloseTo(before!.x, 0)
+
+    await page.getByRole('button', { name: 'Exporter cette zone' }).click()
+    await expect.poll(() => prints(page)).toBe(1)
+    await expect(zoneFrame(page)).toHaveCount(0)
+    expect(await pageRuleText(page)).toBe('@page { size: A4 portrait; margin: 10mm }')
+    const root = page.locator('.print-root')
+    await expect(root.locator('.print-page')).toHaveCount(1)
+    await expect(root.locator('.print-footer')).toHaveText('Zone')
+    // The dragged-over note (board x = 1800) sits inside the page, which the first note (x = 0) does not.
+    const shown = await root.evaluate((el) => {
+      const tx = Number(
+        /translate\((-?[\d.]+)px/.exec(el.querySelector<HTMLElement>('.print-board')!.style.transform)![1],
+      )
+      return [...el.querySelectorAll<HTMLElement>('.print-note')].map((n) => parseFloat(n.style.left) + tx)
+    })
+    expect(shown[0]).toBeLessThan(0)
+    expect(shown[1]).toBeGreaterThan(0)
+    expect(shown[1]).toBeLessThan((190 * 96) / 25.4)
+    if (browserName === 'chromium') {
+      const pdf = pdfPages(await page.pdf({ preferCSSPageSize: true }))
+      expect(pdf.count).toBe(1)
+      expect(pdf.width).toBeCloseTo(595, -1) // A4, in points
+    }
+    await closeDialog(page)
+    await expect(root).toHaveCount(0)
+  })
+
+  test('landscape turns the page; Escape cancels; an empty zone cannot be exported', async ({ page, request }) => {
+    await bigBoard(page, request)
+    await chooseZone(page)
+    await page.getByRole('button', { name: 'Paysage' }).click()
+    const box = (await zoneFrame(page).boundingBox())!
+    expect(box.width).toBeGreaterThan(box.height)
+    await dragZoneTo(page, await center(notes(page).first()))
+    await page.getByRole('button', { name: 'Exporter cette zone' }).click()
+    await expect.poll(() => prints(page)).toBe(1)
+    expect(await pageRuleText(page)).toBe('@page { size: A4 landscape; margin: 10mm }')
+    await closeDialog(page)
+
+    // Far from every note: nothing to export.
+    await chooseZone(page)
+    await dragZoneTo(page, { x: 20, y: 700 })
+    for (let i = 0; i < 20; i++) await zoneFrame(page).press('Shift+ArrowDown')
+    await expect(page.getByRole('button', { name: 'Exporter cette zone' })).toBeDisabled()
+
+    await page.keyboard.press('Escape')
+    await expect(zoneFrame(page)).toHaveCount(0)
+    await expect(page.getByRole('toolbar', { name: 'Exporter une zone A4' })).toHaveCount(0)
+    expect(await prints(page)).toBe(1)
+  })
+})

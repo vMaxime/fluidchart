@@ -4,7 +4,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useReactFlow } from '@xyflow/react'
 import type { Arrow, Id } from '@chart/shared'
 import { listArrows, listNotes } from '../db/repo'
-import { PrintBoard, pageRule, type PrintFormat, type PrintNote } from './PrintBoard'
+import { PrintBoard, pageRule, type ExportZone, type PrintFormat, type PrintNote } from './PrintBoard'
+import { ZonePicker } from './ZonePicker'
+import { a4Area } from './printLayout'
+import { isTypingTarget } from '../canvas/keys'
 import './export.css'
 
 const FORMATS: { format: PrintFormat; title: string; hint: string }[] = [
@@ -18,7 +21,7 @@ const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
  * browser's print dialog (Save as PDF, or print). Everything happens on the device, offline too.
  */
 export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
-  const { getInternalNode } = useReactFlow()
+  const { getInternalNode, getViewport, screenToFlowPosition, fitBounds } = useReactFlow()
   const noteCount = useLiveQuery(async () => (await listNotes(boardId)).length, [boardId])
   const [open, setOpen] = useState(false)
   const [job, setJob] = useState<{
@@ -26,7 +29,10 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     name: string
     notes: PrintNote[]
     arrows: Arrow[]
+    zone?: ExportZone
   } | null>(null)
+  // The A4 frame being placed on the canvas (null: not choosing a zone).
+  const [zone, setZone] = useState<ExportZone | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const empty = !noteCount
 
@@ -43,13 +49,36 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     }
   }, [open])
 
-  const start = async (format: PrintFormat) => {
+  // Choosing a zone: Escape cancels.
+  useEffect(() => {
+    if (!zone) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !isTypingTarget(e) && setZone(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zone === null]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The A4 frame starts in the middle of what is on screen; the view zooms out if it does not fit.
+  const chooseZone = () => {
     setOpen(false)
+    const view = document.querySelector('.react-flow')?.getBoundingClientRect()
+    if (!view) return
+    const area = a4Area('portrait')
+    const c = screenToFlowPosition({ x: view.left + view.width / 2, y: view.top + view.height / 2 })
+    const start: ExportZone = { x: c.x - area.width / 2, y: c.y - area.height / 2, orientation: 'portrait' }
+    setZone(start)
+    const { zoom } = getViewport()
+    if (area.width * zoom > view.width * 0.9 || area.height * zoom > view.height * 0.9)
+      void fitBounds({ ...start, ...area }, { padding: 0.12, duration: 200 })
+  }
+
+  const start = async (format: PrintFormat, chosen?: ExportZone) => {
+    setOpen(false)
+    setZone(null)
     // Read from the db: this read runs after writes already started, including the text of a note
     // saved as its editor lost focus to this menu.
     const [rows, arrows] = await Promise.all([listNotes(boardId), listArrows(boardId)])
     const notes = rows.map((note) => ({ note, height: getInternalNode(note.id)?.measured.height ?? 64 }))
-    setJob({ format, name, notes, arrows })
+    setJob({ format, name, notes, arrows, zone: chosen })
   }
 
   // While a job is mounted: its @page rule, the board name as document title (the PDF's file name),
@@ -58,7 +87,7 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
     if (!job) return
     const style = document.createElement('style')
     style.dataset.printPage = ''
-    style.textContent = pageRule(job.format, job.notes)
+    style.textContent = pageRule(job.format, job.notes, job.zone)
     document.head.append(style)
     const title = document.title
     document.title = job.name
@@ -109,12 +138,24 @@ export function ExportMenu({ boardId, name }: { boardId: Id; name: string }) {
               <span className="export-hint">{f.hint}</span>
             </button>
           ))}
+          <button role="menuitem" onClick={chooseZone}>
+            <span className="export-title">Une zone A4</span>
+            <span className="export-hint">Choisis la partie à imprimer, à taille réelle</span>
+          </button>
         </div>
+      )}
+      {zone && (
+        <ZonePicker
+          zone={zone}
+          onChange={setZone}
+          onExport={() => void start('printer', zone)}
+          onCancel={() => setZone(null)}
+        />
       )}
       {job &&
         createPortal(
           <div className="print-root">
-            <PrintBoard name={job.name} format={job.format} notes={job.notes} arrows={job.arrows} />
+            <PrintBoard name={job.name} format={job.format} notes={job.notes} arrows={job.arrows} zone={job.zone} />
           </div>,
           document.body,
         )}

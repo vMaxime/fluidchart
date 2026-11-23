@@ -62,3 +62,18 @@ it('printer pages stay a little shorter than the A4 printable height, so no roun
   const page = container.querySelector<HTMLElement>('.print-page')!
   expect(parseFloat(page.style.height)).toBeLessThanOrEqual(((190 - 0.5) * 96) / 25.4)
 })
+
+it('zone: one A4 page showing the board at real size from the zone corner, named in its footer', () => {
+  const zone = { x: 400, y: 50, orientation: 'portrait' as const }
+  const notes = [note('a', 0, 0), note('b', 500, 100)]
+  const { container } = render(<PrintBoard name="Hémato" format="printer" notes={notes} arrows={[]} zone={zone} />)
+  expect(container.querySelectorAll('.print-page')).toHaveLength(1)
+  expect(container.querySelector('.print-footer')).toHaveTextContent('Hémato')
+  expect(container.querySelector('.print-footer')).not.toHaveTextContent('/')
+  // The board's top-left is note a (0, 0): the zone corner (400, 50) shows at the tile's 0, 0.
+  expect(container.querySelector<HTMLElement>('.print-board')!.style.transform).toBe('translate(-400px, -50px)')
+  expect(pageRule('printer', notes, zone)).toBe('@page { size: A4 portrait; margin: 10mm }')
+  expect(pageRule('printer', notes, { ...zone, orientation: 'landscape' })).toBe(
+    '@page { size: A4 landscape; margin: 10mm }',
+  )
+})

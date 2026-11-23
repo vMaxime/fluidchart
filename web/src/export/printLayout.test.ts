@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest'
-import { boardBounds, printerLayout, revisionPage, smallestTextPx } from './printLayout'
+import { a4Area, boardBounds, intersects, printerLayout, revisionPage, smallestTextPx } from './printLayout'
 
 const MM = 96 / 25.4
 const OVERLAP = 10 * MM
@@ -68,4 +68,17 @@ it('a tiny or zero font size can neither enlarge the board nor explode the page 
   const l = printerLayout(box(3000, 2000), smallestTextPx(['<p><span style="font-size: 1px;">x</span></p>']))
   expect(l.scale).toBeLessThanOrEqual(1)
   expect(l.tiles.length).toBeLessThanOrEqual(printerLayout(box(3000, 2000), 10).tiles.length)
+})
+
+it('a4Area is the printable A4 sheet at real size, swapped when landscape', () => {
+  expect(a4Area('portrait')).toEqual({ width: 190 * MM, height: 269 * MM })
+  expect(a4Area('landscape')).toEqual({ width: 277 * MM, height: 182 * MM })
+})
+
+it('intersects: boxes sharing area, not boxes merely touching or apart', () => {
+  const a = { x: 0, y: 0, width: 100, height: 100 }
+  expect(intersects(a, { x: 50, y: 50, width: 100, height: 100 })).toBe(true)
+  expect(intersects(a, { x: 100, y: 0, width: 50, height: 50 })).toBe(false)
+  expect(intersects(a, { x: -200, y: 0, width: 50, height: 50 })).toBe(false)
+  expect(intersects(a, { x: 10, y: 10, width: 5, height: 5 })).toBe(true)
 })
