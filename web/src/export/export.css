@@ -80,3 +80,77 @@
     animation: none;
   }
 }
+
+/* « Une zone A4 »: the page-shaped frame on the canvas, and its bar. */
+.zone-frame {
+  position: absolute;
+  box-sizing: border-box;
+  border-style: solid;
+  border-color: var(--accent);
+  /* Everything outside the page is dimmed. */
+  box-shadow: 0 0 0 100000px rgb(28 25 23 / 0.14);
+  background: rgb(255 255 255 / 0.04);
+  cursor: grab;
+  pointer-events: all;
+  touch-action: none;
+}
+.zone-frame:active {
+  cursor: grabbing;
+}
+.zone-frame:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.zone-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  font: 13px var(--font);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.zone-hint {
+  color: var(--text-muted);
+}
+.zone-bar button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 500 13px var(--font);
+  transition: transform 140ms var(--ease-out);
+}
+.zone-bar button:not(:disabled):active {
+  transform: scale(0.97);
+}
+.zone-bar button[aria-pressed='true'] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+.zone-bar .zone-go {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.zone-bar .zone-go:disabled {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.zone-turn {
+  display: flex;
+  gap: 4px;
+}

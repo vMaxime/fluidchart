@@ -20,6 +20,16 @@ const AREA = {
 }
 const OVERLAP = 10 * MM
 
+/** The printable part of an A4 sheet (no margins, no footer), in CSS px. */
+export function a4Area(orientation: 'portrait' | 'landscape'): { width: number; height: number } {
+  return AREA[orientation]
+}
+
+/** Do two boxes share some area? (Touching edges do not count.) */
+export function intersects(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
 export function boardBounds(rects: Box[]): Box {
   if (rects.length === 0) return { x: 0, y: 0, width: 0, height: 0 }
   const x = Math.min(...rects.map((r) => r.x))
