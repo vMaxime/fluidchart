@@ -9,6 +9,7 @@ Un Lucidchart minimaliste pour réviser. On y crée des cartes, on y pose des po
   - outils Sélection (V), Post-it (N) et Flèche (A), avec une infobulle pour chacun ;
   - des « + » sur les bords d'un post-it pour créer et relier le suivant ;
   - une palette de couleurs au-dessus du post-it sélectionné ;
+  - ⌘C sur un post-it sélectionné copie tout son texte ; coller du texte quand rien n'est focalisé crée un post-it au centre de la vue ;
   - ⌘D (ou le bouton « Dupliquer ») copie les post-it sélectionnés, avec les flèches qui les relient ;
   - une poignée en bas à droite du post-it sélectionné pour le redimensionner (la hauteur choisie est un minimum : le texte n'est jamais coupé) ;
   - des flèches courbes qui suivent les post-it, avec une palette de couleurs sur la flèche sélectionnée ou juste tracée.

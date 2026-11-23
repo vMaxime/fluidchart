@@ -147,8 +147,13 @@ export async function listArrows(boardId: Id): Promise<Arrow[]> {
   return rows.map(strip)
 }
 
-export async function addNote(boardId: Id, pos: { x: number; y: number }, color: NoteColor): Promise<Note> {
-  const note = newNote(boardId, pos, color, Date.now())
+export async function addNote(
+  boardId: Id,
+  pos: { x: number; y: number },
+  color: NoteColor,
+  html?: string,
+): Promise<Note> {
+  const note = { ...newNote(boardId, pos, color, Date.now()), ...(html !== undefined && { html }) }
   await db.notes.add({ ...note, dirty: 1 })
   return note
 }

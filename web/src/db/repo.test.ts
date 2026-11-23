@@ -206,3 +206,10 @@ it('duplicateNotes skips deleted or unknown notes', async () => {
   expect(copy.notes).toHaveLength(1)
   expect(await repo.duplicateNotes([])).toEqual({ notes: [], arrows: [] })
 })
+
+it('addNote can start with a given text', async () => {
+  const b = await repo.createBoard('A')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'green', '<p>Collé</p>')
+  expect(await db.notes.get(n.id)).toMatchObject({ html: '<p>Collé</p>', color: 'green', dirty: 1 })
+  expect((await repo.addNote(b.id, { x: 0, y: 0 }, 'green')).html).toBe('<p></p>')
+})
