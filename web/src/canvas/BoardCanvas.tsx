@@ -19,6 +19,7 @@ import {
   addNote,
   deleteArrows,
   deleteNotes,
+  duplicateNotes,
   listArrows,
   listNotes,
   updateArrow,
@@ -73,7 +74,13 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
   useEffect(() => {
     if (!notes) return
     if (fitOnMount.current === null) fitOnMount.current = notes.length > 0
-    setNodes((cur) => mergeNodes(notes, cur ?? []))
+    setNodes((cur) => {
+      const next = mergeNodes(notes, cur ?? [])
+      const pending = selectNotesOnArrival.current
+      if (!pending || ![...pending].every((id) => notes.some((n) => n.id === id))) return next
+      selectNotesOnArrival.current = null
+      return next.map((n) => ({ ...n, selected: pending.has(n.id) }))
+    })
   }, [notes])
   useEffect(() => {
     if (!arrows) return
@@ -85,6 +92,9 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
       return select ? next.map((e) => ({ ...e, selected: e.id === select })) : next
     })
   }, [arrows])
+
+  /** Notes just duplicated, to select once they arrive from the db (so the copies, not the originals, are selected). */
+  const selectNotesOnArrival = useRef<Set<Id> | null>(null)
 
   /** Selects a freshly drawn arrow (alone), so its colour palette shows. */
   const selectNewArrow = useCallback(
@@ -147,6 +157,24 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     },
     [history],
   )
+
+  /** ⌘D / the Dupliquer button: copies the selected notes (and arrows between them), selects the copies. */
+  const duplicate = useCallback(() => {
+    const ids = selected.map((n) => n.id)
+    if (ids.length === 0 || editingId) return
+    void trackWrite(history.record(() => duplicateNotes(ids))).then((copy) => {
+      if (!copy || copy.notes.length === 0) return
+      for (const n of copy.notes) freshIds.current.add(n.id)
+      selectNotesOnArrival.current = new Set(copy.notes.map((n) => n.id))
+      // The live query may already have delivered them: apply the selection now.
+      const have = new Set(getNodes().map((n) => n.id))
+      if (copy.notes.every((n) => have.has(n.id))) {
+        selectNotesOnArrival.current = null
+        const mine = new Set(copy.notes.map((n) => n.id))
+        setNodes((cur) => cur && cur.map((n) => ({ ...n, selected: mine.has(n.id) })))
+      }
+    })
+  }, [selected, editingId, history, getNodes])
 
   const recolorArrow = useCallback(
     (id: Id, color: ArrowColor) => void trackWrite(history.record(() => updateArrow(id, { color }))),
@@ -271,6 +299,11 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
         void trackWrite(key === 'y' || e.shiftKey ? history.redo() : history.undo())
         return
       }
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === 'd') {
+        e.preventDefault() // the browser would bookmark the page
+        duplicate()
+        return
+      }
       if (selected.length === 1) {
         if (e.key === 'Enter') {
           e.preventDefault()
@@ -290,7 +323,7 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, editingId, startEditing, history])
+  }, [selected, editingId, startEditing, history, duplicate])
 
   // Removals go through onDelete (tombstones in the db, one undo step), never local-only.
   const onNodesChange: OnNodesChange<NoteFlowNode> = useCallback((changes) => {
@@ -374,6 +407,8 @@ export function BoardCanvas({ boardId }: { boardId: Id }) {
           canRedo={history.canRedo()}
           onUndo={() => void trackWrite(history.undo())}
           onRedo={() => void trackWrite(history.redo())}
+          canDuplicate={selected.length > 0 && !editingId}
+          onDuplicate={duplicate}
         />
         <div
           ref={flowRef}

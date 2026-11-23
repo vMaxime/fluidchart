@@ -174,3 +174,35 @@ it('updateNote sets then clears the minimum height', async () => {
   expect(row.height).toBeUndefined()
   expect(row.width).toBe(320)
 })
+
+it('duplicateNotes copies notes (offset, same text, colour and size) and the arrows between them only', async () => {
+  const b = await repo.createBoard('A')
+  const n1 = await repo.addNote(b.id, { x: 10, y: 20 }, 'pink')
+  const n2 = await repo.addNote(b.id, { x: 300, y: 20 }, 'blue')
+  const outside = await repo.addNote(b.id, { x: 600, y: 20 }, 'green')
+  await repo.updateNote(n1.id, { html: '<p>Insuline</p>', width: 320, height: 150 })
+  const inner = (await repo.addArrow(b.id, n1.id, n2.id))!
+  await repo.updateArrow(inner.id, { color: 'red' })
+  await repo.addArrow(b.id, n2.id, outside.id)
+  const copy = await repo.duplicateNotes([n1.id, n2.id])
+  expect(copy.notes).toHaveLength(2)
+  const [c1, c2] = copy.notes
+  expect(c1).toMatchObject({ x: 42, y: 52, html: '<p>Insuline</p>', color: 'pink', width: 320, height: 150, boardId: b.id })
+  expect(c2).toMatchObject({ x: 332, y: 52, color: 'blue' })
+  expect(new Set([c1.id, c2.id, n1.id, n2.id]).size).toBe(4)
+  expect(copy.arrows).toHaveLength(1)
+  expect(copy.arrows[0]).toMatchObject({ from: c1.id, to: c2.id, color: 'red' })
+  expect(await db.notes.get(c1.id)).toMatchObject({ dirty: 1, deleted: false })
+  expect(await repo.listNotes(b.id)).toHaveLength(5)
+  expect(await repo.listArrows(b.id)).toHaveLength(3)
+})
+
+it('duplicateNotes skips deleted or unknown notes', async () => {
+  const b = await repo.createBoard('A')
+  const n = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  const gone = await repo.addNote(b.id, { x: 0, y: 0 }, 'yellow')
+  await repo.deleteNotes([gone.id])
+  const copy = await repo.duplicateNotes([n.id, gone.id, 'nope'])
+  expect(copy.notes).toHaveLength(1)
+  expect(await repo.duplicateNotes([])).toEqual({ notes: [], arrows: [] })
+})
